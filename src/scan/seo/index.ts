@@ -9,14 +9,38 @@ export {
   isValidLanguageTag,
   jsonLdObservations,
   linkObservations,
+  mergeObservations,
   noindexObservations,
+  pageObservations,
   renderingObservations,
   robotsObservations,
   sitemapObservations,
   statusObservations,
   toObservations,
 } from './checks.ts';
-export { BUDGET, type CollectOptions, collect } from './collect.ts';
+export { BUDGET, type CollectOptions, collect, collectSite } from './collect.ts';
+export {
+  CRAWL_BUDGET,
+  type CrawlOptions,
+  crawlSite,
+  internalLinksOf,
+  isCrawlable,
+  MAX_DEEP_PAGES,
+  MIN_DEEP_PAGES,
+  sampleUrls,
+} from './crawl.ts';
+export {
+  canonicalChainObservations,
+  type DeepObservations,
+  hreflangReturnObservations,
+  metaDescriptionDuplicateObservations,
+  nearDuplicateObservations,
+  type OrphanResult,
+  orphanPageObservations,
+  sitemapDirtyObservations,
+  siteObservations,
+  titleDuplicateObservations,
+} from './deep-checks.ts';
 export {
   type Fetcher,
   type FetchTrace,
@@ -33,6 +57,7 @@ export {
   parseLycheeOutput,
 } from './links.ts';
 export {
+  bodyText,
   countBodyWords,
   findEmptyMountRoot,
   type HreflangLink,
@@ -43,7 +68,13 @@ export {
   type ResourceRef,
   resolveUrl,
 } from './page.ts';
-export { resolveToolVersion, SEO_TOOL, type SeoCollector, seoProbe } from './probe.ts';
+export {
+  resolveToolVersion,
+  SEO_TOOL,
+  type SeoCollector,
+  type SeoSiteCollector,
+  seoProbe,
+} from './probe.ts';
 export {
   groupFor,
   parseRobots,
@@ -56,7 +87,17 @@ export {
   verdictFor,
 } from './robots.ts';
 export {
+  hammingDistance,
+  MIN_WORDS_FOR_SIMHASH,
+  NEAR_DUPLICATE_DISTANCE,
+  simhash,
+  words,
+} from './simhash.ts';
+export type { SamplePage, SiteAnalysis } from './site.ts';
+export {
+  extractLocs,
   inspectSitemap,
+  MAX_COLLECTED_LOCS,
   MAX_SITEMAP_BYTES,
   MAX_SITEMAP_URLS,
   runXmllintValidation,

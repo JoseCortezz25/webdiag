@@ -384,6 +384,16 @@ describe('the quick budget', () => {
   test('every phase is bounded, so no run hangs on somebody else’s server', () => {
     for (const value of Object.values(BUDGET)) {
       expect(value).toBeGreaterThan(0);
+      expect(value).toBeLessThanOrEqual(60_000);
+    }
+  });
+
+  test('every quick phase fits the quick allowance', () => {
+    // `deepLinks` is excluded by name: it belongs to a mode that is allowed to
+    // take longer, and folding it in here would quietly widen the quick bound.
+    const { deepLinks: _deep, ...quick } = BUDGET;
+
+    for (const value of Object.values(quick)) {
       expect(value).toBeLessThanOrEqual(25_000);
     }
   });

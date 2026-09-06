@@ -84,6 +84,7 @@ export function sitemap(overrides: Partial<SitemapReport> = {}): SitemapReport {
     byteLength: 4_096,
     validation: { valid: true, schema: 'sitemap', errors: [] },
     toolError: undefined,
+    locs: [],
     ...overrides,
   };
 }

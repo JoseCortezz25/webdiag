@@ -50,7 +50,7 @@ const MAX_REPORTED_LINKS = 25;
 export type LinkCheckOptions = {
   readonly timeoutMs: number;
   /** Injected so the unit tests never spawn a process or touch the network. */
-  readonly run?: (url: string, timeoutMs: number) => Promise<LinkReport>;
+  readonly run?: (urls: readonly string[], timeoutMs: number) => Promise<LinkReport>;
 };
 
 function numberOf(value: unknown): number {
@@ -114,9 +114,24 @@ export async function lycheeVersion(): Promise<string | undefined> {
   }
 }
 
-export async function checkLinks(url: string, options: LinkCheckOptions): Promise<LinkReport> {
+/**
+ * Checks every link on every page it is given, in one lychee run.
+ *
+ * One invocation rather than one per page because lychee deduplicates targets
+ * across its inputs: ten pages that all link the same broken footer URL cost one
+ * request and produce one broken link, not ten. That is what makes the `deep`
+ * crawl affordable here at all.
+ */
+export async function checkLinks(
+  urls: readonly string[],
+  options: LinkCheckOptions,
+): Promise<LinkReport> {
   if (options.run !== undefined) {
-    return options.run(url, options.timeoutMs);
+    return options.run(urls, options.timeoutMs);
+  }
+
+  if (urls.length === 0) {
+    return unavailable('failed', 'no page URLs to check');
   }
 
   let child: Bun.Subprocess<'ignore', 'pipe', 'pipe'>;
@@ -137,7 +152,7 @@ export async function checkLinks(url: string, options: LinkCheckOptions): Promis
         '--accept',
         '200..=299,401,403,429',
         '--',
-        url,
+        ...urls,
       ],
       { stdout: 'pipe', stderr: 'pipe' },
     );

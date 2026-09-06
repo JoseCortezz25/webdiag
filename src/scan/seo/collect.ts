@@ -11,10 +11,12 @@
  * a probe that will one day hang a CI job on somebody else's slow server.
  */
 import type { CanonicalTarget, SeoAnalysis } from './analysis.ts';
+import { type CrawlOptions, crawlSite } from './crawl.ts';
 import { type Fetcher, fetchText, traceUrl } from './http.ts';
 import { checkLinks, type LinkReport } from './links.ts';
 import { metaContent, parsePage, resolveUrl } from './page.ts';
 import { parseRobots, type RobotsFile } from './robots.ts';
+import type { SiteAnalysis } from './site.ts';
 import { inspectSitemap, type SitemapReport, type XmllintRunner } from './sitemap.ts';
 
 /** Budgets, in milliseconds. They sum to well under the `quick` allowance. */
@@ -24,12 +26,16 @@ export const BUDGET = {
   sitemap: 15_000,
   canonical: 10_000,
   links: 25_000,
+  /** `deep` hands lychee ten pages instead of one, so it gets proportionally more. */
+  deepLinks: 60_000,
 } as const;
 
 export type CollectOptions = {
   readonly fetchImpl?: Fetcher;
   readonly runXmllint?: XmllintRunner;
-  readonly runLychee?: (url: string, timeoutMs: number) => Promise<LinkReport>;
+  readonly runLychee?: (urls: readonly string[], timeoutMs: number) => Promise<LinkReport>;
+  /** Injected so the deep crawl's deadline is assertable without a real clock. */
+  readonly now?: () => number;
 };
 
 function isHtml(headers: Readonly<Record<string, string>>): boolean {
@@ -152,10 +158,18 @@ function emptySitemap(): SitemapReport {
     byteLength: 0,
     validation: undefined,
     toolError: undefined,
+    locs: [],
   };
 }
 
-export async function collect(url: string, options: CollectOptions = {}): Promise<SeoAnalysis> {
+/**
+ * The entry point: the page itself, and the robots.txt that governs it.
+ *
+ * Both `quick` and `deep` start here and then fan out differently, so the two
+ * round trips that every other lookup depends on are written once. `robots` is
+ * awaited rather than parallelised because the sitemap candidates come out of it.
+ */
+async function loadEntry(url: string, options: CollectOptions) {
   const fetchOption = options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl };
 
   const trace = await traceUrl(url, { timeoutMs: BUDGET.page, ...fetchOption });
@@ -165,18 +179,95 @@ export async function collect(url: string, options: CollectOptions = {}): Promis
   const origin = new URL(trace.finalUrl).origin;
   const robots = await loadRobots(origin, options);
 
+  return { trace, page, origin, robots };
+}
+
+function sitemapOptionsFor(options: CollectOptions, followIndex: boolean) {
+  return {
+    timeoutMs: BUDGET.sitemap,
+    followIndex,
+    ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl }),
+    ...(options.runXmllint === undefined ? {} : { runXmllint: options.runXmllint }),
+  };
+}
+
+export async function collect(url: string, options: CollectOptions = {}): Promise<SeoAnalysis> {
+  const { trace, page, origin, robots } = await loadEntry(url, options);
+
   const [sitemap, canonical, links] = await Promise.all([
-    inspectSitemap(origin, robots?.sitemaps ?? [], {
-      timeoutMs: BUDGET.sitemap,
-      ...fetchOption,
-      ...(options.runXmllint === undefined ? {} : { runXmllint: options.runXmllint }),
-    }).catch(emptySitemap),
+    inspectSitemap(origin, robots?.sitemaps ?? [], sitemapOptionsFor(options, false)).catch(
+      emptySitemap,
+    ),
     loadCanonical(page?.canonicals[0], trace.finalUrl, options),
-    checkLinks(trace.finalUrl, {
+    checkLinks([trace.finalUrl], {
       timeoutMs: BUDGET.links,
       ...(options.runLychee === undefined ? {} : { run: options.runLychee }),
     }),
   ]);
 
   return { url, trace, page, robots, sitemap, links, canonical };
+}
+
+/** A placeholder the crawl carries until the real link report exists. */
+const PENDING_LINKS: LinkReport = {
+  outcome: 'failed',
+  detail: 'the link check had not run yet',
+  total: 0,
+  successful: 0,
+  excluded: 0,
+  broken: [],
+};
+
+/**
+ * A `deep` run: the seed, a 5–10 page sample around it, and one link check over
+ * all of them.
+ *
+ * The order is forced rather than chosen. lychee runs last because it takes the
+ * sampled URLs as its inputs, and the sample is what the crawl decided; running
+ * it first would check one page and call the axis deep.
+ */
+export async function collectSite(
+  url: string,
+  pages: number,
+  options: CollectOptions = {},
+): Promise<SiteAnalysis> {
+  const { trace, page, origin, robots } = await loadEntry(url, options);
+
+  const [sitemap, canonical] = await Promise.all([
+    inspectSitemap(origin, robots?.sitemaps ?? [], sitemapOptionsFor(options, true)).catch(
+      emptySitemap,
+    ),
+    loadCanonical(page?.canonicals[0], trace.finalUrl, options),
+  ]);
+
+  const seed: SeoAnalysis = {
+    url,
+    trace,
+    page,
+    robots,
+    sitemap,
+    canonical,
+    links: PENDING_LINKS,
+  };
+
+  const crawlOptions: CrawlOptions = {
+    ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl }),
+    ...(options.now === undefined ? {} : { now: options.now }),
+  };
+
+  const site = await crawlSite(seed, pages, crawlOptions);
+
+  const links = await checkLinks(
+    site.pages.map((page) => page.analysis.trace.finalUrl),
+    {
+      timeoutMs: BUDGET.deepLinks,
+      ...(options.runLychee === undefined ? {} : { run: options.runLychee }),
+    },
+  );
+
+  return {
+    ...site,
+    seed: { ...site.seed, links },
+    pages: site.pages.map((page) => ({ ...page, analysis: { ...page.analysis, links } })),
+  };
 }
