@@ -144,11 +144,48 @@ never deducted.
 | `bun run format:check` | Formatting check only, no writes |
 | `bun test` | Bun's test runner |
 
+## The agent layer
+
+`webdiag` deliberately stops at measurement. Deciding *how* to invoke it for a given
+client, and deciding which of forty findings is the one costing money, is judgment that
+lives in a Claude skill: [`.agents/skills/webdiag-report`](.agents/skills/webdiag-report)
+(spec §4, layer 3).
+
+| | `webdiag` (CLI) | `webdiag-report` (skill) |
+|---|---|---|
+| Responsibility | measure | decide and explain |
+| Runs without AI | yes | no |
+| Usable in CI | yes | no |
+| Reads | the live site, the repo | `summary.json`, and nothing else |
+| Produces | `raw/`, `findings.json`, `summary.json`, `report.html`, `meta.json` | `narrative.json` → `client-report.html` |
+
+The skill installs this CLI as a dependency, calls `webdiag scan` with a mode, axis set
+and page count chosen from the conversation, writes a prioritised narrative, and renders
+the client report with `build_report.py`:
+
+```bash
+python3 .agents/skills/webdiag-report/scripts/build_report.py \
+  --summary   ./out/summary.json \
+  --narrative ./out/narrative.json \
+  --out       ./out/client-report.html
+```
+
+The script refuses (exit `3`) if the narrative cites a finding the summary does not
+contain, or if a blocking critical from the summary's cover page is left unranked.
+`src/scan/skill-contract.test.ts` guards the constants the Python restates — schema
+version, axes, severities — against drift from the TypeScript.
+
 ## Repository structure
 
 ```
 .
 ├── .github/workflows/ci.yml   CI: lint · typecheck · test · build on every push and PR
+├── .agents/skills/            Agent skills; .claude/skills/ symlinks into this tree
+│   └── webdiag-report/        Layer 3: the judgment and drafting skill
+│       ├── SKILL.md           The procedure: context → invocation → narrative → report
+│       ├── scripts/           `build_report.py`, narrative + summary → client report
+│       ├── references/        The narrative contract and the summary fields it reads
+│       └── examples/          A real summary plus a complete narrative over it
 ├── src/
 │   ├── cli.ts                 Executable entrypoint (shebang, argv, exit code)
 │   ├── cli.test.ts            Integration test: spawns the real CLI process
@@ -181,7 +218,8 @@ never deducted.
 │       ├── summary.ts         Builds `summary.json`, the agent layer's only input
 │       ├── meta.ts            Builds `meta.json`: catalog and tool versions
 │       ├── report.ts          Renders the self-contained `report.html`
-│       └── orchestrator.ts    Wires it together and writes the artifacts
+│       ├── orchestrator.ts    Wires it together and writes the artifacts
+│       └── skill-contract.test.ts  Guards the skill's copies of schema, axes, severities
 ├── docs/
 │   ├── inbox/                 Source material: spec and findings catalog
 │   └── agents/                Conventions for agents working in this repo
@@ -206,6 +244,9 @@ Design rules the code enforces rather than documents:
 - **The probe never decides severity.** Observations carry no severity, so the catalog
   stays the only authority: `A11Y-FORM-LABEL-MISSING` is `high`, and
   `A11Y-BUTTON-NAME-MISSING` is a blocking `critical` that zeroes the axis.
+- **The agent layer cannot reach the raw dumps.** `summary.json` carries every number,
+  path, remediation and piece of evidence a client report needs, and `build_report.py`
+  refuses a `--summary` that points inside `raw/`.
 
 ## Continuous integration
 
