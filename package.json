@@ -22,7 +22,7 @@
     "puppeteer"
   ],
   "scripts": {
-    "build": "bun build ./src/cli.ts --outdir dist --target bun --minify --external lighthouse --external puppeteer --external @puppeteer/browsers --external chrome-launcher --external retire && chmod +x dist/cli.js",
+    "build": "bun build ./src/cli.ts --outdir dist --target bun --minify --external lighthouse --external puppeteer --external @puppeteer/browsers --external retire && chmod +x dist/cli.js",
     "install:testssl": "bash scripts/install-testssl.sh",
     "install:whitebox": "bash scripts/install-whitebox.sh",
     "dev": "bun run ./src/cli.ts",
@@ -41,7 +41,6 @@
   "dependencies": {
     "@puppeteer/browsers": "3.2.2",
     "axe-core": "4.13.0",
-    "chrome-launcher": "1.2.1",
     "lighthouse": "13.4.1",
     "puppeteer": "25.10.0",
     "retire": "^5.7.0",

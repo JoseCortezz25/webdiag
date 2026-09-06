@@ -8,12 +8,22 @@
  * pineadas"; pinning the binary is only half of it, the configuration is the
  * other half.
  *
- * The browser is launched here and killed in a `finally`, so a Lighthouse throw
- * cannot leak a Chrome process into the machine running the diagnostic.
+ * The browser is launched here, through puppeteer, and closed in a `finally`,
+ * so a Lighthouse throw cannot leak a Chrome process into the machine running
+ * the diagnostic. Puppeteer rather than `chrome-launcher` on purpose: the
+ * latter decides where the profile directory goes by guessing at the host,
+ * and under WSL that guess is a Windows path which, joined from Linux, becomes
+ * a literal `C:\Users\...` directory in the operator's working directory.
+ * Puppeteer keeps the profile under the OS temp directory and removes it.
  */
-import { launch } from 'chrome-launcher';
 import lighthouse from 'lighthouse';
-import { type ResolvedChrome, resolveChrome } from './chrome.ts';
+import puppeteer from 'puppeteer';
+import {
+  debuggingPortOf,
+  headlessLaunchOptions,
+  type ResolvedChrome,
+  resolveChromeOnce,
+} from './chrome.ts';
 import type { LighthouseReport } from './lhr.ts';
 
 /** Pinned, no range. `chrome.test.ts` fails when the lockfile drifts from it. */
@@ -22,10 +32,10 @@ export const PINNED_LIGHTHOUSE_VERSION = '13.4.1';
 /**
  * Flags chosen for a headless server, not for a desktop. `--no-sandbox` is here
  * because CI containers run as root and Chrome refuses to start otherwise; the
- * pages we open are the client's own public site.
+ * pages we open are the client's own public site. No `--headless`: the pinned
+ * binary is the headless shell and puppeteer passes the one flag it expects.
  */
-const CHROME_FLAGS: readonly string[] = [
-  '--headless',
+export const LIGHTHOUSE_CHROME_FLAGS: readonly string[] = [
   '--no-sandbox',
   '--disable-gpu',
   '--disable-dev-shm-usage',
@@ -62,16 +72,13 @@ export async function runLighthouse(
   url: string,
   options: LighthouseOptions = {},
 ): Promise<LighthouseRun> {
-  const chrome = options.chrome ?? (await resolveChrome());
+  const chrome = options.chrome ?? (await resolveChromeOnce());
 
-  const browser = await launch({
-    chromePath: chrome.executablePath,
-    chromeFlags: [...CHROME_FLAGS],
-  });
+  const browser = await puppeteer.launch(headlessLaunchOptions(chrome, LIGHTHOUSE_CHROME_FLAGS));
 
   try {
     const run = await lighthouse(url, {
-      port: browser.port,
+      port: debuggingPortOf(browser.wsEndpoint()),
       output: 'json',
       logLevel: 'error',
       onlyCategories: [...CATEGORIES],
@@ -93,6 +100,6 @@ export async function runLighthouse(
 
     return { report, chrome };
   } finally {
-    await browser.kill();
+    await browser.close();
   }
 }

@@ -22,6 +22,7 @@
  */
 import { homedir } from 'node:os';
 import { Browser, computeExecutablePath, install } from '@puppeteer/browsers';
+import type { LaunchOptions } from 'puppeteer';
 
 /** Pinned, no range. Bumping it invalidates comparisons against older runs. */
 export const PINNED_CHROME_BUILD = '148.0.7778.97';
@@ -71,9 +72,22 @@ export function pinnedExecutablePath(env: ChromeEnvironment): string {
   });
 }
 
+/** `--version` prints one line and exits; a binary that does not is not a browser we can drive. */
+const VERSION_TIMEOUT_MS = 15_000;
+
 async function readVersion(executablePath: string): Promise<string> {
-  const child = Bun.spawn([executablePath, '--version'], { stdout: 'pipe', stderr: 'pipe' });
-  const [stdout, exitCode] = await Promise.all([new Response(child.stdout).text(), child.exited]);
+  const child = Bun.spawn([executablePath, '--version'], {
+    stdout: 'pipe',
+    stderr: 'pipe',
+    timeout: VERSION_TIMEOUT_MS,
+  });
+  // Both pipes drained: a Chrome that logs warnings to stderr on start would
+  // otherwise fill the pipe and never exit.
+  const [stdout, exitCode] = await Promise.all([
+    new Response(child.stdout).text(),
+    child.exited,
+    new Response(child.stderr).text(),
+  ]);
 
   if (exitCode !== 0) {
     throw new Error(`'${executablePath} --version' exited with code ${exitCode}.`);
@@ -147,4 +161,65 @@ export async function resolveChrome(env: ChromeEnvironment = process.env): Promi
     pinned: true,
     source: 'download',
   };
+}
+
+let resolvedOnce: Promise<ResolvedChrome> | undefined;
+
+/**
+ * `resolveChrome`, once per process.
+ *
+ * Three probes launch a browser and they start together. Without this, a cold
+ * cache would begin three concurrent 150 MB downloads of the same build into the
+ * same directory. A failed resolution is not memoised, so a transient error on
+ * one probe does not doom the next run in the same process.
+ */
+export function resolveChromeOnce(env: ChromeEnvironment = process.env): Promise<ResolvedChrome> {
+  resolvedOnce ??= resolveChrome(env).catch((cause: unknown) => {
+    resolvedOnce = undefined;
+    throw cause;
+  });
+
+  return resolvedOnce;
+}
+
+/**
+ * Chrome's sandbox stays on by default, because every browser probe loads
+ * whatever a client site serves and that is untrusted code. Containers that
+ * cannot create the user namespace it needs opt out explicitly, never by silent
+ * fallback on a launch failure.
+ */
+export function sandboxArgs(env: ChromeEnvironment = process.env): readonly string[] {
+  return env.WEBDIAG_CHROME_NO_SANDBOX === '1' ? ['--no-sandbox', '--disable-dev-shm-usage'] : [];
+}
+
+/**
+ * The puppeteer launch options every browser probe uses for the pinned binary.
+ *
+ * `headless: 'shell'` because the binary *is* `chrome-headless-shell`: it does
+ * not understand `--headless=new`, which is what `headless: true` would pass.
+ * No `--headless` in `args` either, for the same reason — puppeteer adds the
+ * one flag the shell expects. Puppeteer owns the profile directory: it is
+ * created under the OS temp directory and removed on `close()`, so a scan never
+ * writes anything into the operator's working directory.
+ */
+export function headlessLaunchOptions(
+  chrome: ResolvedChrome,
+  args: readonly string[] = [],
+): LaunchOptions & { readonly executablePath: string; readonly headless: 'shell' } {
+  return {
+    executablePath: chrome.executablePath,
+    headless: 'shell',
+    args: args.filter((flag) => !flag.startsWith('--headless')),
+  };
+}
+
+/** `ws://127.0.0.1:9222/devtools/browser/<id>` → `9222`. What Lighthouse connects to. */
+export function debuggingPortOf(wsEndpoint: string): number {
+  const port = Number(new URL(wsEndpoint).port);
+
+  if (!Number.isInteger(port) || port <= 0) {
+    throw new Error(`The browser endpoint '${wsEndpoint}' carries no debugging port.`);
+  }
+
+  return port;
 }

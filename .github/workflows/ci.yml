@@ -36,8 +36,10 @@ jobs:
       - name: Typecheck
         run: bun run typecheck
 
-      - name: Install Chrome for the accessibility probe
-        run: bunx puppeteer browsers install chrome
+      - name: Install the pinned Chrome every browser probe launches
+        # Same build `src/scan/perf/chrome.ts` resolves at runtime; installing
+        # it here keeps the test step from paying the download on first use.
+        run: bunx @puppeteer/browsers install chrome-headless-shell@148.0.7778.97 --path ~/.cache/puppeteer
 
       - name: Test
         run: bun test
