@@ -16,9 +16,23 @@ export {
   mappedAxeRules,
   mappingForAxeRule,
   parseAxeReport,
-  toObservations,
+  toObservations as toA11yObservations,
 } from './a11y/index.ts';
 export { DEFAULT_OUT_DIR, type ParsedScan, type ParseError, parseScanArgs } from './args.ts';
+export {
+  type AssetCollection,
+  type DepsAnalysis,
+  type DepsAnalyzer,
+  depsProbe,
+  type Enrichment,
+  type JsAsset,
+  type LibraryHit,
+  RETIRE_TOOL,
+  RETIRE_VERSION,
+  type RetireReport,
+  type SourcemapFinding,
+  toObservations as toDepsObservations,
+} from './deps/index.ts';
 export { buildMeta, META_SCHEMA_VERSION, type Meta, type ToolRecord } from './meta.ts';
 export {
   type NormalizedRun,

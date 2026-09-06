@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { AXES } from '../catalog/index.ts';
 import { AXE_TOOL } from './a11y/index.ts';
+import { RETIRE_TOOL } from './deps/index.ts';
 import { PINNED_PERF_TOOL } from './perf/index.ts';
 import { defaultProbes, probeFor, REAL_PROBE_AXES } from './probes.ts';
 import { SECURITY_TOOL_NAME } from './sec/index.ts';
@@ -13,6 +14,7 @@ const REAL_TOOL_NAME: Partial<Record<(typeof AXES)[number], string>> = {
   A11Y: AXE_TOOL.name,
   SEO: SEO_TOOL.name,
   SEC: SECURITY_TOOL_NAME,
+  DEPS: RETIRE_TOOL.name,
 };
 
 describe('probe registry', () => {

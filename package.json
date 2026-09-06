@@ -40,6 +40,7 @@
     "chrome-launcher": "1.2.1",
     "lighthouse": "13.4.1",
     "puppeteer": "25.10.0",
+    "retire": "^5.7.0",
     "zod": "4.5.4"
   }
 }

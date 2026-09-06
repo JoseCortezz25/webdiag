@@ -17,6 +17,7 @@
 import type { Axis } from '../catalog/index.ts';
 import { AXES } from '../catalog/index.ts';
 import { a11yProbe } from './a11y/index.ts';
+import { depsProbe } from './deps/index.ts';
 import { lighthouseProbe } from './perf/index.ts';
 import type { Probe } from './probe.ts';
 import { type SecurityProbeOptions, securityProbe } from './sec/index.ts';
@@ -41,6 +42,7 @@ const REAL_PROBES: Readonly<Partial<Record<Axis, (options: ProbeRegistryOptions)
   A11Y: () => a11yProbe(),
   SEO: () => seoProbe(),
   SEC: (options) => securityProbe(options.security),
+  DEPS: () => depsProbe(),
 };
 
 /** Axes whose probe measures the real site, in catalogue order. */
