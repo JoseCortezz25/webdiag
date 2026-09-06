@@ -66,9 +66,10 @@ describe('webdiag-report skill contract', () => {
     expect(summary.byAxis.map((axis: { axis: string }) => axis.axis)).toEqual([...AXES]);
   });
 
-  test('the example narrative cites only findings the example summary measured', async () => {
+  test('the example narrative cites only findings the example summary and agent findings measured', async () => {
     const summary = JSON.parse(await read('examples/summary.example.json'));
     const narrative = JSON.parse(await read('examples/narrative.example.json'));
+    const agentFindings = JSON.parse(await read('examples/agent-findings.example.json'));
 
     type FindingLike = { readonly id: string };
     const measured = new Set<string>(
@@ -76,6 +77,9 @@ describe('webdiag-report skill contract', () => {
         [...axis.findings, ...axis.lowConfidence].map((finding) => finding.id),
       ),
     );
+    for (const finding of agentFindings.findings as FindingLike[]) {
+      measured.add(finding.id);
+    }
 
     const cited = narrative.priorities.flatMap(
       (priority: { findingIds: string[] }) => priority.findingIds,

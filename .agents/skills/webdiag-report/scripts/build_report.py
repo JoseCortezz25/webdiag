@@ -41,6 +41,53 @@ from typing import Any
 # from a future CLI is refused loudly instead of half-rendered.
 SUMMARY_SCHEMA = "webdiag.summary/1"
 NARRATIVE_SCHEMA = "webdiag.narrative/1"
+AGENT_FINDINGS_SCHEMA = "webdiag.agent-findings/1"
+
+# The only IDs `--agent-findings` may cite (spec fase 4 / docs/inbox/findings-catalog.md
+# phase "4"): the four checks the catalogue itself marks as agent judgment, because
+# none of them can come from axe-core. Screenshots evaluated by the agent are the
+# evidence; this script still refuses anything outside this list, for the same
+# reason it refuses an unmeasured id in a priority — a report that can invent
+# findings is not trustworthy just because the inventor is a model instead of a
+# person.
+AGENT_FINDING_CATALOG: dict[str, dict[str, Any]] = {
+    "A11Y-KEYBOARD-TRAP": {
+        "title": "Hay un foco de teclado atrapado: no se puede salir con Tab/Shift+Tab",
+        "severity": "critical",
+        "blocking": True,
+        "remediation": (
+            "Permitir salir del componente con Escape y mantener Tab/Shift+Tab funcionando; "
+            "nunca capturar el foco de teclado sin una via de escape."
+        ),
+    },
+    "A11Y-FOCUS-NOT-VISIBLE": {
+        "title": "El indicador de foco no es visible en algunos controles",
+        "severity": "high",
+        "blocking": False,
+        "remediation": (
+            "Restaurar o reforzar el indicador de foco (outline o equivalente) en vez de "
+            "quitarlo con CSS; debe verse en todos los estados interactivos."
+        ),
+    },
+    "A11Y-FOCUS-ORDER-ILLOGICAL": {
+        "title": "El orden de tabulacion no sigue el orden visual de la pagina",
+        "severity": "high",
+        "blocking": False,
+        "remediation": (
+            "Alinear el orden del DOM (o el tabindex) con el orden visual de lectura; evitar "
+            "tabindex positivos que salten el flujo natural."
+        ),
+    },
+    "A11Y-ALT-NOT-DESCRIPTIVE": {
+        "title": "Hay imagenes con alt presente pero no descriptivo",
+        "severity": "medium",
+        "blocking": False,
+        "remediation": (
+            "Redactar un alt que describa el contenido o la funcion de la imagen; evitar "
+            'textos genericos como "imagen" o nombres de archivo.'
+        ),
+    },
+}
 
 # Mirrors src/catalog/taxonomy.ts. Kept in lockstep by the contract test in
 # src/scan/skill-contract.test.ts.
@@ -204,6 +251,85 @@ def load_narrative(path: Path) -> dict[str, Any]:
     return narrative
 
 
+def load_agent_findings(path: Path | None, summary: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """Findings the agent judged from screenshots — never from axe-core.
+
+    Returns them pre-shaped like a summary finding, so the rest of the script
+    (citation, rendering) cannot tell them apart from measured evidence except
+    by the `source` field.
+    """
+    if path is None:
+        return {}
+
+    data = load_json(path, "Los hallazgos del agente")
+    if not isinstance(data, dict):
+        raise ReportError("--agent-findings debe ser un objeto JSON.")
+
+    schema = data.get("schema")
+    if schema != AGENT_FINDINGS_SCHEMA:
+        raise ReportError(
+            f"Schema de agent-findings no soportado: {schema!r}. "
+            f"Se esperaba {AGENT_FINDINGS_SCHEMA!r}."
+        )
+
+    raw_findings = data.get("findings")
+    if not isinstance(raw_findings, list) or len(raw_findings) == 0:
+        raise ReportError("agent-findings.findings debe ser una lista no vacia.")
+
+    already_measured = index_findings(summary)
+    merged: dict[str, dict[str, Any]] = {}
+
+    for index, raw in enumerate(raw_findings):
+        where = f"agent-findings.findings[{index}]"
+        if not isinstance(raw, dict):
+            raise ReportError(f"{where} debe ser un objeto.")
+
+        finding_id = raw.get("id")
+        if finding_id not in AGENT_FINDING_CATALOG:
+            allowed = ", ".join(sorted(AGENT_FINDING_CATALOG))
+            raise ReportError(
+                f"{where}.id invalido: {finding_id!r}. La capa de agente por screenshot solo "
+                f"puede emitir: {allowed}."
+            )
+
+        if finding_id in already_measured:
+            raise ReportError(
+                f"{where} cita '{finding_id}', que el summary ya midio. Un hallazgo de agente "
+                "solo existe para lo que axe-core no pudo evaluar."
+            )
+
+        evidence = raw.get("evidence")
+        if not isinstance(evidence, dict) or not evidence:
+            raise ReportError(
+                f"{where} necesita 'evidence' (que screenshot, que se observo) para no ser un "
+                "hallazgo inventado."
+            )
+
+        confidence = raw.get("confidence", "medium")
+        if confidence not in CONFIDENCE_LABEL:
+            raise ReportError(
+                f"{where}.confidence invalido: {confidence!r}. Valores: "
+                f"{', '.join(CONFIDENCE_LABEL)}."
+            )
+
+        catalog = AGENT_FINDING_CATALOG[finding_id]
+        merged[finding_id] = {
+            "id": finding_id,
+            "title": catalog["title"],
+            "severity": catalog["severity"],
+            "confidence": confidence,
+            "count": raw.get("count", 1),
+            "affected": raw.get("affected") or [],
+            "evidence": evidence,
+            "remediation": catalog["remediation"],
+            "source": "agent:screenshot-review",
+            "ownerAxis": "A11Y",
+            "blocking": catalog["blocking"],
+        }
+
+    return merged
+
+
 # --------------------------------------------------------------------------- #
 # Cross-checks between narrative and measurement
 # --------------------------------------------------------------------------- #
@@ -235,27 +361,31 @@ def index_findings(summary: dict[str, Any]) -> dict[str, dict[str, Any]]:
     return findings
 
 
-def check_priorities(narrative: dict[str, Any], summary: dict[str, Any]) -> None:
+def check_priorities(
+    narrative: dict[str, Any], summary: dict[str, Any], agent_findings: dict[str, dict[str, Any]]
+) -> None:
     """Refuse a narrative that invents evidence or buries a blocking critical."""
-    measured = index_findings(summary)
+    measured = {**index_findings(summary), **agent_findings}
     cited: set[str] = set()
 
     for index, priority in enumerate(narrative["priorities"]):
         for finding_id in priority["findingIds"]:
             if finding_id not in measured:
                 raise ReportError(
-                    f"priorities[{index}] cita '{finding_id}', que no esta en el summary. "
-                    "La narrativa prioriza lo medido, no agrega hallazgos."
+                    f"priorities[{index}] cita '{finding_id}', que no esta ni en el summary ni "
+                    "en agent-findings. La narrativa prioriza lo medido y lo evaluado por el "
+                    "agente, no agrega hallazgos."
                 )
             cited.add(finding_id)
 
     blocking = [item["id"] for item in summary.get("coverPage", []) if isinstance(item, dict)]
+    blocking += [finding_id for finding_id, finding in agent_findings.items() if finding["blocking"]]
     unranked = [finding_id for finding_id in blocking if finding_id not in cited]
 
     if unranked:
         raise ReportError(
-            "Estos hallazgos bloqueantes estan en portada del summary y ninguna prioridad "
-            f"los cita: {', '.join(unranked)}. Un bloqueante no puede quedar sin priorizar."
+            "Estos hallazgos bloqueantes no estan citados por ninguna prioridad: "
+            f"{', '.join(unranked)}. Un bloqueante no puede quedar sin priorizar."
         )
 
 
@@ -287,6 +417,12 @@ def axis_label(axis: str) -> str:
 
 def paragraphs(text: str) -> list[str]:
     return [block.strip() for block in str(text).split("\n\n") if block.strip()]
+
+
+def agent_findings_footer(agent_findings: dict[str, dict[str, Any]]) -> str:
+    if not agent_findings:
+        return ""
+    return f" · evaluados por el agente via screenshots (no axe-core): {len(agent_findings)}"
 
 
 def evidence_lines(finding: dict[str, Any]) -> list[tuple[str, str]]:
@@ -483,9 +619,14 @@ def html_list_section(title: str, items: list[Any]) -> str:
     return f'<h3>{esc(title)}</h3><div class="list"><ul>{entries}</ul></div>'
 
 
-def render_html(narrative: dict[str, Any], summary: dict[str, Any], generated_at: str) -> str:
+def render_html(
+    narrative: dict[str, Any],
+    summary: dict[str, Any],
+    generated_at: str,
+    agent_findings: dict[str, dict[str, Any]],
+) -> str:
     target = summary.get("target", {})
-    measured = index_findings(summary)
+    measured = {**index_findings(summary), **agent_findings}
     priorities = ranked_priorities(narrative)
     axis_notes = narrative.get("axisNotes", {})
     context = narrative.get("context") or {}
@@ -563,7 +704,7 @@ combine: promediarlos enterraria el hallazgo que importa.</p>
 <footer>
 <p>Hallazgos medidos: {esc(summary.get("totals", {}).get("findings", 0))} ·
 puntuados: {esc(summary.get("totals", {}).get("scored", 0))} ·
-confianza baja: {esc(summary.get("totals", {}).get("lowConfidence", 0))}.
+confianza baja: {esc(summary.get("totals", {}).get("lowConfidence", 0))}{agent_findings_footer(agent_findings)}.
 Medicion por <code>webdiag</code> (catalogo {esc(summary.get("catalogVersion", ""))});
 priorizacion y redaccion por la skill <code>webdiag-report</code>.</p>
 </footer>
@@ -607,9 +748,14 @@ def md_finding(finding: dict[str, Any]) -> list[str]:
     return lines
 
 
-def render_markdown(narrative: dict[str, Any], summary: dict[str, Any], generated_at: str) -> str:
+def render_markdown(
+    narrative: dict[str, Any],
+    summary: dict[str, Any],
+    generated_at: str,
+    agent_findings: dict[str, dict[str, Any]],
+) -> str:
     target = summary.get("target", {})
-    measured = index_findings(summary)
+    measured = {**index_findings(summary), **agent_findings}
     verdict = narrative["verdict"]
     axis_notes = narrative.get("axisNotes", {})
     invocation = narrative.get("invocation") or {}
@@ -697,7 +843,8 @@ def render_markdown(narrative: dict[str, Any], summary: dict[str, Any], generate
     totals = summary.get("totals", {})
     lines.append(
         f'Hallazgos medidos: {totals.get("findings", 0)} · puntuados: {totals.get("scored", 0)} · '
-        f'confianza baja: {totals.get("lowConfidence", 0)}. '
+        f'confianza baja: {totals.get("lowConfidence", 0)}'
+        f"{agent_findings_footer(agent_findings)}. "
         "Medicion por `webdiag`; priorizacion y redaccion por la skill `webdiag-report`."
     )
 
@@ -720,6 +867,15 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     )
     parser.add_argument("--out", required=True, type=Path, help="Where to write the report")
     parser.add_argument("--format", choices=("html", "md"), default="html", help="Output format")
+    parser.add_argument(
+        "--agent-findings",
+        type=Path,
+        default=None,
+        help=(
+            "Path to agent-findings JSON (webdiag.agent-findings/1): A11Y checks judged from "
+            "screenshots, which axe-core cannot evaluate"
+        ),
+    )
     return parser.parse_args(argv)
 
 
@@ -732,11 +888,12 @@ def main(argv: list[str]) -> int:
     try:
         summary = load_summary(args.summary)
         narrative = load_narrative(args.narrative)
-        check_priorities(narrative, summary)
+        agent_findings = load_agent_findings(args.agent_findings, summary)
+        check_priorities(narrative, summary, agent_findings)
 
         generated_at = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
         render = render_html if args.format == "html" else render_markdown
-        document = render(narrative, summary, generated_at)
+        document = render(narrative, summary, generated_at, agent_findings)
 
         args.out.parent.mkdir(parents=True, exist_ok=True)
         args.out.write_text(document, encoding="utf-8")
@@ -745,7 +902,8 @@ def main(argv: list[str]) -> int:
         return EXIT_FAILED
 
     priorities = len(narrative["priorities"])
-    print(f"build_report: {args.out} ({priorities} prioridad(es), formato {args.format})")
+    suffix = f", {len(agent_findings)} hallazgo(s) de agente" if agent_findings else ""
+    print(f"build_report: {args.out} ({priorities} prioridad(es){suffix}, formato {args.format})")
     return EXIT_OK
 
 

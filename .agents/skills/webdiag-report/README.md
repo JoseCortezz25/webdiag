@@ -13,8 +13,8 @@ findings is the one costing money. That is what this skill adds.
 | Responsibility | measure | decide and explain |
 | Runs without AI | yes | no |
 | Usable in CI | yes | no |
-| Reads | the live site, the repo | `summary.json`, and nothing else |
-| Produces | `raw/`, `findings.json`, `summary.json`, `report.html`, `meta.json` | `narrative.json` → `client-report.html` |
+| Reads | the live site, the repo | `summary.json`, and screenshots it captures itself |
+| Produces | `raw/`, `findings.json`, `summary.json`, `report.html`, `meta.json` | `narrative.json`, `agent-findings.json` → `client-report.html` |
 
 ## Install
 
@@ -34,13 +34,17 @@ tree of symlinks into `.agents/skills/`, matching the layout the rest of the
 skills use.
 
 Requirements: Bun ≥ 1.2 for the CLI, Python 3.9+ for `build_report.py` (standard
-library only — no `pip install`).
+library only — no `pip install`). `capture_states.ts` reuses the CLI's own
+`puppeteer` dependency, so no separate browser install is needed inside this
+repo.
 
 ## Use
 
 Ask for a diagnostic in the conversation and the skill runs the loop: establish
 the business context, choose the invocation, read the summary, write the
-narrative, build the report. See [`SKILL.md`](SKILL.md) for the full procedure.
+narrative, optionally capture and judge screenshots for the four A11Y checks
+axe-core cannot see, build the report. See [`SKILL.md`](SKILL.md) for the full
+procedure.
 
 The last step is a script, and it is runnable on its own:
 
@@ -64,10 +68,13 @@ mechanical half of the two rules the skill exists to keep:
   is refused, and a summary whose schema is not `webdiag.summary/1` is refused
   rather than half-rendered.
 - **The narrative prioritises, it does not invent.** A cited finding id that is
-  not in the summary is refused; a blocking critical on the summary's cover page
-  that no priority mentions is refused. That second one is the whole reason the
-  scoring override rule exists — an average would return 71 and bury the
-  `noindex` on production.
+  not in the summary (or, for the four fase-4 checks, in `agent-findings.json`)
+  is refused; a blocking critical on the summary's cover page that no priority
+  mentions is refused. That second one is the whole reason the scoring override
+  rule exists — an average would return 71 and bury the `noindex` on production.
+- **A screenshot judgment is still a claim.** `--agent-findings` only accepts
+  the four ids axe-core cannot measure, refuses one axe-core already measured,
+  and refuses a finding with no `evidence` pointing at a screenshot.
 
 ## Layout
 
@@ -75,13 +82,16 @@ mechanical half of the two rules the skill exists to keep:
 webdiag-report/
 ├── SKILL.md                        the procedure and the judgment guidance
 ├── README.md                       this file
-├── scripts/build_report.py         narrative + summary.json → client report
+├── scripts/build_report.py         narrative + summary.json (+ agent findings) → client report
+├── scripts/capture_states.ts       screenshots default/hover/focus states for fase-4 judgment
 ├── references/
 │   ├── narrative-schema.md         the `webdiag.narrative/1` contract
-│   └── summary-fields.md           the summary fields the agent reads
+│   ├── summary-fields.md           the summary fields the agent reads
+│   └── agent-findings-schema.md    the `webdiag.agent-findings/1` contract
 └── examples/
     ├── summary.example.json        a real `webdiag scan` output
-    └── narrative.example.json      a complete narrative over it
+    ├── narrative.example.json      a complete narrative over it
+    └── agent-findings.example.json screenshot-judged findings for the same dry run
 ```
 
 `src/scan/skill-contract.test.ts` in the CLI repo guards the shared constants

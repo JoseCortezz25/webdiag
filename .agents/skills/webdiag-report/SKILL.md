@@ -18,7 +18,10 @@ Three rules, in order of how badly breaking them hurts:
    and an axe dump. Opening one burns the context you need for judgment and buys
    nothing: every number, path, remediation and piece of evidence that belongs in
    a report is already in the summary. `findings.json` and `meta.json` are also
-   out of scope — the summary carries what you need from both.
+   out of scope — the summary carries what you need from both. Screenshots are
+   the one exception: they are evidence you capture yourself for the four
+   checks no probe can measure (see
+   [Screenshot judgment](#5-screenshot-judgment-fase-4)), never a raw probe dump.
 2. **Decide the invocation from the conversation, not from a default.** Mode,
    axes and page count depend on what the client sells, who visits, and what
    they asked. That context exists only in the conversation. See
@@ -144,14 +147,69 @@ Length discipline: an executive summary is 2–4 paragraphs; 3–6 priorities is
 usually right. Ten priorities is a list, and a list is what you were asked to
 replace.
 
-### 5. Build the report
+### 5. Screenshot judgment (fase 4)
+
+Four checks in the catalogue are marked "juicio del agente" because axe-core
+has no rule for them: `A11Y-ALT-NOT-DESCRIPTIVE`, `A11Y-FOCUS-NOT-VISIBLE`,
+`A11Y-FOCUS-ORDER-ILLOGICAL`, `A11Y-KEYBOARD-TRAP`. axe only checks that
+`alt` exists, never what it says; it never moves the mouse or presses Tab. Do
+this step whenever A11Y is in scope and the client audience cares about real
+usage, not only the automated 57%.
+
+Capture the three states the checks need — default, hover, focus — plus an
+alt-text audit:
+
+```bash
+bun run .agents/skills/webdiag-report/scripts/capture_states.ts \
+  https://client.example --out ./diag-2026-09-06/screenshots
+```
+
+This writes `default.png`, one cropped screenshot per Tab stop under
+`focus/` (with the focused element's computed outline/box-shadow alongside
+it), one before/after pair per hovered control under `hover/`, one screenshot
+per image that already has a non-empty `alt` under `alt/`, and a
+`manifest.json` tying it all together. It also flags a
+`keyboardTrapSignal` when three consecutive Tab presses land on the exact same
+element — a normal document never does that on its own — but the signal is
+just a pointer at evidence, never a finding by itself.
+
+Read the manifest and the screenshots it points at, then judge, per id:
+
+- **`A11Y-ALT-NOT-DESCRIPTIVE`**: read `altAudit[]`. An `alt` that repeats the
+  filename ("imagen1.jpg"), says only the medium ("foto", "imagen"), or does
+  not match what the cropped screenshot actually shows, is not descriptive —
+  regardless of whether axe already passed it for existing.
+- **`A11Y-FOCUS-NOT-VISIBLE`**: compare a `focusOrder[]` screenshot against the
+  same element's appearance in `default.png`. `outline: "none"` and no visible
+  change in the crop means the control has no indicator at all.
+- **`A11Y-FOCUS-ORDER-ILLOGICAL`**: read `focusOrder[]` in step order and check
+  it against the visual layout in `default.png`. A tab sequence that jumps
+  from the header to the footer and back, or skips a whole visible section, is
+  illogical even though every individual element is reachable.
+- **`A11Y-KEYBOARD-TRAP`**: only confirm this from the screenshots — a
+  `keyboardTrapSignal` that shows the same control across three or more
+  consecutive `focus/*.png` frames, with no visible way to leave (no close
+  button, no Escape affordance) reachable in that state.
+
+Write what you confirmed to `agent-findings.json`, matching
+[`references/agent-findings-schema.md`](references/agent-findings-schema.md).
+**Checking and finding nothing is a valid outcome** — do not manufacture a
+finding to have something to show; say what you checked in the narrative's
+`axisNotes.A11Y` instead. Skip this whole step (and the `--agent-findings`
+flag below) when you did not capture screenshots.
+
+### 6. Build the report
 
 ```bash
 python3 .agents/skills/webdiag-report/scripts/build_report.py \
   --summary ./diag-2026-09-06/summary.json \
   --narrative ./diag-2026-09-06/narrative.json \
+  --agent-findings ./diag-2026-09-06/agent-findings.json \
   --out ./diag-2026-09-06/client-report.html
 ```
+
+Omit `--agent-findings` when step 5 was skipped; the report still renders
+from `summary.json` and the narrative alone.
 
 `--format md` renders Markdown instead, for pasting into an email or a ticket.
 Python 3.9+; standard library only. Exit `0` on success, `3` on refusal, and it
@@ -176,6 +234,7 @@ Hand the client `client-report.html` (judgment) and, if they have engineers,
 | A `coverPage` finding is cited by no priority | A blocking critical cannot be quietly demoted |
 | Missing `verdict`, `executiveSummary`, or an empty `priorities` | A report without judgment is the thing this layer replaces |
 | `axisNotes` names an axis outside the six | Catches a typo before the client sees it |
+| `--agent-findings` cites an id outside the four fase-4 checks, or one axe-core already measured, or one with no `evidence` | A screenshot judgment is still a claim; it needs the same guardrails as a measured finding |
 
 These are not style checks. Each one is a way the report could lie.
 
@@ -183,8 +242,11 @@ These are not style checks. Each one is a way the report could lie.
 
 | Path | What it is |
 |---|---|
-| `scripts/build_report.py` | Narrative + `summary.json` → client report (HTML or Markdown) |
+| `scripts/build_report.py` | Narrative + `summary.json` (+ optional agent findings) → client report (HTML or Markdown) |
+| `scripts/capture_states.ts` | Screenshots the page in default/hover/focus states for fase-4 judgment |
 | `references/narrative-schema.md` | The `webdiag.narrative/1` contract, field by field |
 | `references/summary-fields.md` | The `summary.json` fields you read, so you never open the source |
+| `references/agent-findings-schema.md` | The `webdiag.agent-findings/1` contract for screenshot-judged A11Y checks |
 | `examples/narrative.example.json` | A complete narrative for the summary in `examples/` |
 | `examples/summary.example.json` | A real `webdiag scan` summary, for a dry run |
+| `examples/agent-findings.example.json` | Screenshot-judged findings for the same dry run |

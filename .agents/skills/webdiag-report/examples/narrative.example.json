@@ -40,10 +40,12 @@
       "findingIds": [
         "A11Y-IMG-ALT-MISSING",
         "A11Y-CONTRAST-INSUFFICIENT",
-        "A11Y-LANDMARKS-MISSING"
+        "A11Y-LANDMARKS-MISSING",
+        "A11Y-ALT-NOT-DESCRIPTIVE",
+        "A11Y-FOCUS-NOT-VISIBLE"
       ],
-      "businessImpact": "Las imagenes de producto sin texto alternativo dejan a quien usa lector de pantalla sin saber que esta comprando, y el contraste insuficiente afecta a cualquiera con luz de dia sobre la pantalla. Es publico que hoy no puede comprar, ademas de exposicion regulatoria.",
-      "recommendation": "Empezar por el catalogo: el alt de producto puede salir del nombre en la base de datos, asi que es una correccion de plantilla y no de contenido. El contraste requiere una decision de diseno sobre la paleta secundaria antes de tocar codigo.",
+      "businessImpact": "Las imagenes de producto sin texto alternativo dejan a quien usa lector de pantalla sin saber que esta comprando, y las que si tienen alt lo repiten del nombre de archivo, que es el mismo problema con otro nombre. El contraste insuficiente afecta a cualquiera con luz de dia sobre la pantalla, y el enlace de navegacion sin indicador de foco deja a quien navega con teclado sin saber donde esta parado. Es publico que hoy no puede comprar, ademas de exposicion regulatoria.",
+      "recommendation": "Empezar por el catalogo: el alt de producto puede salir del nombre en la base de datos, asi que es una correccion de plantilla y no de contenido — de paso, revisar que ese alt describa la prenda y no el archivo. El contraste requiere una decision de diseno sobre la paleta secundaria antes de tocar codigo. El indicador de foco es una linea de CSS: no quitar el outline nativo sin poner un reemplazo visible.",
       "effort": "medium",
       "horizon": "next"
     },
