@@ -43,14 +43,25 @@ function messageOf(cause: unknown): string {
   return cause instanceof Error ? cause.message : String(cause);
 }
 
-/** Runs one probe and contains its failure to that probe's axis. */
+/**
+ * Runs one probe and contains its failure to that probe's axis.
+ *
+ * On success the tool identity comes from the raw document, not from
+ * `probe.tool`: a probe that drives an external binary only learns its exact
+ * version by running it, and spec §6 wants the version that actually measured
+ * — "cada herramienta, incluida la de Chrome". `probe.tool` is the declared
+ * identity and is what a failed outcome reports, because at that point nothing
+ * ran and there is no better answer.
+ */
 export async function runProbe(probe: Probe, context: ProbeContext): Promise<ProbeOutcome> {
   try {
+    const raw = await probe.run(context);
+
     return {
       status: 'ok',
       axis: probe.axis,
-      tool: probe.tool,
-      raw: await probe.run(context),
+      tool: raw.tool,
+      raw,
     };
   } catch (cause) {
     return {

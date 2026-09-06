@@ -39,6 +39,16 @@ describe('webdiag executable', () => {
   });
 });
 
+/**
+ * The axes still backed by the phase 0 fixture.
+ *
+ * A11Y is excluded on purpose: it launches Chrome and reads a live page, so
+ * folding it in would turn "the pipeline is deterministic" into "the internet
+ * did not change between two runs" — a different, much weaker claim. The real
+ * probe is exercised against a local server in `src/scan/a11y/probe.test.ts`.
+ */
+const FIXTURE_AXES = 'PERF,SEO,DEPS,SEC,AGENT';
+
 describe('webdiag scan (end to end)', () => {
   const outDir = `${process.env.TMPDIR ?? '/tmp'}/webdiag-cli-e2e-${process.pid}`;
 
@@ -52,6 +62,8 @@ describe('webdiag scan (end to end)', () => {
       'https://example.com',
       '--mode',
       'quick',
+      '--axes',
+      FIXTURE_AXES,
       '--out',
       outDir,
     ]);
@@ -71,6 +83,8 @@ describe('webdiag scan (end to end)', () => {
       'https://example.com',
       '--mode',
       'quick',
+      '--axes',
+      FIXTURE_AXES,
       '--out',
       outDir,
     ]);

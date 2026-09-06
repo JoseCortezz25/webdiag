@@ -34,11 +34,16 @@ const REQUEST: ScanRequest = {
 
 const FIXED_CLOCK = () => new Date('2026-09-06T12:00:00.000Z');
 
-async function scan(overrides: Partial<ScanRequest> = {}, probes?: readonly Probe[]) {
+/**
+ * The probe set is always injected: `runScan` now defaults to the real probes,
+ * and the A11Y one launches Chrome. These tests are about the orchestrator, so
+ * they stay on the fixture.
+ */
+async function scan(overrides: Partial<ScanRequest> = {}, probes: readonly Probe[] = stubProbes()) {
   const writer = memoryWriter();
   const result = await runScan(
     { ...REQUEST, ...overrides },
-    { writer, clock: FIXED_CLOCK, ...(probes === undefined ? {} : { probes }) },
+    { writer, clock: FIXED_CLOCK, probes },
   );
 
   return { writer, result };

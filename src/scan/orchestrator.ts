@@ -19,9 +19,9 @@ import { AXES } from '../catalog/index.ts';
 import { buildMeta, type Meta } from './meta.ts';
 import { normalize } from './normalize.ts';
 import { type Probe, type ProbeContext, type ProbeOutcome, runProbe } from './probe.ts';
+import { defaultProbes } from './probes.ts';
 import type { RawDocument } from './raw.ts';
 import { renderReport } from './report.ts';
-import { stubProbes } from './stub-probe.ts';
 import { buildSummary, type Summary } from './summary.ts';
 
 export type ScanRequest = {
@@ -44,7 +44,7 @@ export type ArtifactWriter = {
 };
 
 export type ScanOptions = {
-  /** Injected so tests can drive a failing or partial probe set. */
+  /** Injected so tests can drive a fixture, a failing probe or a partial set. */
   readonly probes?: readonly Probe[];
   /** Injected so `meta.json` is assertable. */
   readonly clock?: () => Date;
@@ -109,7 +109,7 @@ export async function runScan(
 ): Promise<ScanResult> {
   const clock = options.clock ?? (() => new Date());
   const writer = options.writer ?? FILESYSTEM_WRITER;
-  const probes = options.probes ?? stubProbes();
+  const probes = options.probes ?? defaultProbes();
   const startedAt = clock();
 
   const context: ProbeContext = {
