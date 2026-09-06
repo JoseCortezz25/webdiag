@@ -1,10 +1,12 @@
 import { describe, expect, test } from 'bun:test';
 import { AXES, CATALOG_VERSION } from '../catalog/index.ts';
+import type { Fetcher } from './agent/http.ts';
+import { agentProbe } from './agent/index.ts';
 import type { ArtifactWriter, ScanRequest } from './orchestrator.ts';
 import { runScan } from './orchestrator.ts';
 import type { Probe } from './probe.ts';
 import { RAW_SCHEMA_VERSION } from './raw.ts';
-import { STUB_TOOL, stubProbes } from './stub-probe.ts';
+import { STUB_TOOL, stubProbe, stubProbes } from './stub-probe.ts';
 
 function memoryWriter(): ArtifactWriter & { files: Map<string, string>; dirs: string[] } {
   const files = new Map<string, string>();
@@ -34,11 +36,19 @@ const REQUEST: ScanRequest = {
 
 const FIXED_CLOCK = () => new Date('2026-09-06T12:00:00.000Z');
 
-async function scan(overrides: Partial<ScanRequest> = {}, probes?: readonly Probe[]) {
+/**
+ * The probe set is always injected, never defaulted.
+ *
+ * `runScan` falls back to `defaultProbes()`, which now contains a real probe
+ * that talks to the network. These tests are about the pipeline — ordering,
+ * determinism, artifacts — so they drive it with the fixture set and leave the
+ * real registry to `probes.test.ts` and to the integration test below.
+ */
+async function scan(overrides: Partial<ScanRequest> = {}, probes: readonly Probe[] = stubProbes()) {
   const writer = memoryWriter();
   const result = await runScan(
     { ...REQUEST, ...overrides },
-    { writer, clock: FIXED_CLOCK, ...(probes === undefined ? {} : { probes }) },
+    { writer, clock: FIXED_CLOCK, probes },
   );
 
   return { writer, result };
@@ -177,5 +187,55 @@ describe('runScan', () => {
     for (const contents of writer.files.values()) {
       expect(contents.endsWith('\n')).toBe(true);
     }
+  });
+});
+
+describe('runScan con el probe AGENT real', () => {
+  const PAGE =
+    '<!doctype html><html><body><div id="app"><button><svg></svg></button></div><script src="/b.js"></script></body></html>';
+
+  /** Serves a site with no landmarks, no JSON-LD and no flat files. */
+  const fetcher: Fetcher = (url) =>
+    Promise.resolve(
+      url === 'https://example.com/' || url === 'https://example.com'
+        ? { url, status: 200, contentType: 'text/html', body: PAGE, error: undefined }
+        : { url, status: 404, contentType: undefined, body: '', error: undefined },
+    );
+
+  async function scanWithAgent() {
+    return scan(
+      {},
+      AXES.map((axis) => (axis === 'AGENT' ? agentProbe(fetcher) : stubProbe(axis))),
+    );
+  }
+
+  test('meta.json names the measuring tool for AGENT and the fixture for the rest', async () => {
+    const { writer } = await scanWithAgent();
+    const meta = JSON.parse(writer.files.get('/out/meta.json') ?? '{}');
+    const byAxis = new Map(meta.tools.map((tool: { axis: string }) => [tool.axis, tool]));
+
+    expect(byAxis.get('AGENT')).toMatchObject({ name: 'webdiag-agent', status: 'ok' });
+    expect(byAxis.get('SEO')).toMatchObject({ name: STUB_TOOL.name });
+  });
+
+  test('the landmark finding it reports is scored by A11Y and only mentioned in AGENT', async () => {
+    const { result } = await scanWithAgent();
+    const byAxis = new Map(result.summary.byAxis.map((axis) => [axis.axis, axis]));
+
+    expect(byAxis.get('AGENT')?.mentions.map((finding) => finding.id)).toContain(
+      'A11Y-LANDMARKS-MISSING',
+    );
+    expect(byAxis.get('AGENT')?.deductions.map((deduction) => deduction.id)).not.toContain(
+      'A11Y-LANDMARKS-MISSING',
+    );
+    expect(byAxis.get('A11Y')?.findings.map((finding) => finding.id)).toContain(
+      'A11Y-LANDMARKS-MISSING',
+    );
+  });
+
+  test('the report states that this axis has unproven impact', async () => {
+    const { writer } = await scanWithAgent();
+
+    expect(writer.files.get('/out/report.html')).toContain('Impacto no probado');
   });
 });

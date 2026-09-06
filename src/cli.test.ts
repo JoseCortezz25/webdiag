@@ -39,6 +39,17 @@ describe('webdiag executable', () => {
   });
 });
 
+/**
+ * The axes still served by the fixture.
+ *
+ * AGENT is left out on purpose: its probe is real, so including it would make
+ * this suite require a working network and turn an outage into a red build. The
+ * real axis is covered by `scan/agent/*.test.ts` (rules) and by the integration
+ * test in `scan/orchestrator.test.ts` (wiring), and by running the CLI against a
+ * live site, which is not something a unit suite should do on every commit.
+ */
+const FIXTURE_AXES = 'PERF,A11Y,SEO,DEPS,SEC';
+
 describe('webdiag scan (end to end)', () => {
   const outDir = `${process.env.TMPDIR ?? '/tmp'}/webdiag-cli-e2e-${process.pid}`;
 
@@ -52,6 +63,8 @@ describe('webdiag scan (end to end)', () => {
       'https://example.com',
       '--mode',
       'quick',
+      '--axes',
+      FIXTURE_AXES,
       '--out',
       outDir,
     ]);
@@ -71,6 +84,8 @@ describe('webdiag scan (end to end)', () => {
       'https://example.com',
       '--mode',
       'quick',
+      '--axes',
+      FIXTURE_AXES,
       '--out',
       outDir,
     ]);

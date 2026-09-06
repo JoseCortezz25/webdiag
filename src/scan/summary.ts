@@ -33,6 +33,7 @@ export const DISCLAIMERS: readonly string[] = [
   'Un diagnostico automatizado no sustituye una auditoria formal: cerca del 43% de los criterios WCAG exige revision humana.',
   'Este informe no emite juicios legales de cumplimiento (EAA, ADA) ni incluye escaneo activo de seguridad.',
   'Los hallazgos con confianza baja se listan aparte y no afectan ningun puntaje.',
+  'El impacto del eje Agent-readiness (AGENT) no esta probado: se reporta con su propio nivel, no se combina con ningun otro eje y no debe leerse como un factor de posicionamiento demostrado.',
 ];
 
 export type FindingSummary = {
