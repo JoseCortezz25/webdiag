@@ -74,6 +74,18 @@ describe('findingSchema', () => {
     expect(safeParseFinding({ ...VALID, doc_ref: 'see the docs' }).success).toBe(false);
   });
 
+  test.each([['javascript:alert(1)'], ['data:text/html,<script>1</script>'], ['ftp://x.test/a']])(
+    'rejects a doc_ref with a non-http(s) scheme: %s',
+    (docRef) => {
+      // The report renders `doc_ref` as a link; only a web reference belongs there.
+      expect(safeParseFinding({ ...VALID, doc_ref: docRef }).success).toBe(false);
+    },
+  );
+
+  test('accepts an http doc_ref as well as https', () => {
+    expect(safeParseFinding({ ...VALID, doc_ref: 'http://docs.test/a' }).success).toBe(true);
+  });
+
   test.each([['source'], ['tool'], ['remediation']])('rejects an empty %s', (field) => {
     expect(safeParseFinding({ ...VALID, [field]: '' }).success).toBe(false);
   });

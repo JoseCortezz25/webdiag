@@ -2,7 +2,7 @@ import { afterAll, describe, expect, test } from 'bun:test';
 import { existsSync } from 'node:fs';
 import type { ProbeContext } from '../probe.ts';
 import { runProbe } from '../probe.ts';
-import { RAW_SCHEMA_VERSION } from '../raw.ts';
+import { parseRawDocument, RAW_SCHEMA_VERSION } from '../raw.ts';
 import { toObservations } from './adapter.ts';
 import { detectLibraryHits } from './analyze.ts';
 import { collectServedScripts } from './collector.ts';
@@ -76,6 +76,23 @@ describe('depsProbe in white-box mode (context.repo set)', () => {
     expect(raw.observations.map((observation) => observation.id)).not.toContain(
       'DEPS-VERSION-UNDETERMINED',
     );
+  });
+
+  test('stamps the white-box document with mode whitebox so findings.json can tell', async () => {
+    // Regression: `Mode` has always declared `whitebox`, but nothing ever
+    // assigned it, so every white-box finding was labelled `quick`.
+    const probe = depsProbe(undefined, () => Promise.resolve(whiteboxAnalysis()));
+
+    const raw = await probe.run(WHITEBOX_CONTEXT);
+
+    expect(raw.target.mode).toBe('whitebox');
+    expect(() => parseRawDocument(raw)).not.toThrow();
+  });
+
+  test('a black-box run keeps the mode the operator asked for', async () => {
+    const raw = await depsProbe(() => Promise.resolve(depsAnalysis())).run(CONTEXT);
+
+    expect(raw.target.mode).toBe('quick');
   });
 
   test('reports osv-scanner as the tool, with Syft and ESLint as components', async () => {

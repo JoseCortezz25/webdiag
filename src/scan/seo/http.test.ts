@@ -6,7 +6,7 @@
  * produce a nine-hop loop on demand.
  */
 import { describe, expect, test } from 'bun:test';
-import { type Fetcher, fetchText, traceUrl, USER_AGENT } from './http.ts';
+import { type Fetcher, fetchText, MAX_BODY_BYTES, traceUrl, USER_AGENT } from './http.ts';
 
 const OPTIONS = { timeoutMs: 1_000 };
 
@@ -209,11 +209,15 @@ describe('traceUrl', () => {
 });
 
 describe('fetchText', () => {
-  test('returns the status and the body without walking redirects itself', async () => {
+  test('returns the status and the body, walking redirects hop by hop', async () => {
     let sent: RequestInit | undefined;
-    const fetchImpl: Fetcher = (_url, init) => {
+    const { fetch } = router({
+      'https://example.com/robots.txt': { status: 301, location: '/robots-v2.txt' },
+      'https://example.com/robots-v2.txt': { status: 200, body: 'User-agent: *' },
+    });
+    const fetchImpl: Fetcher = (url, init) => {
       sent = init;
-      return Promise.resolve(new Response('User-agent: *', { status: 200 }));
+      return fetch(url, init);
     };
 
     const result = await fetchText('https://example.com/robots.txt', {
@@ -223,7 +227,22 @@ describe('fetchText', () => {
 
     expect(result.status).toBe(200);
     expect(result.body).toBe('User-agent: *');
-    expect(sent?.redirect).toBe('follow');
+    expect(result.finalUrl).toBe('https://example.com/robots-v2.txt');
+    // Manual so that every hop passes the address policy; `follow` would let
+    // the server steer the request anywhere before we saw the Location.
+    expect(sent?.redirect).toBe('manual');
+  });
+
+  test('asks for any content type, unlike a page trace', async () => {
+    let sent: RequestInit | undefined;
+    const fetchImpl: Fetcher = (_url, init) => {
+      sent = init;
+      return Promise.resolve(new Response('ok', { status: 200 }));
+    };
+
+    await fetchText('https://example.com/sitemap.xml', { ...OPTIONS, fetchImpl });
+
+    expect(new Headers(sent?.headers).get('accept')).toBe('*/*');
   });
 
   test('falls back to the requested URL when the response has none', async () => {
@@ -232,5 +251,78 @@ describe('fetchText', () => {
 
     expect(result.finalUrl).toBe('https://example.com/sitemap.xml');
     expect(result.status).toBe(404);
+  });
+});
+
+describe('body cap', () => {
+  /** A body that never ends. Without a streaming cap this fetch never returns. */
+  function endless(): Response {
+    const stream = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        controller.enqueue(new Uint8Array(64 * 1024).fill(0x78));
+      },
+    });
+    return new Response(stream, {
+      status: 200,
+      headers: { 'content-type': 'text/html', 'content-length': '99999999999' },
+    });
+  }
+
+  test('cuts an oversized body at the cap while streaming and says so', async () => {
+    const trace = await traceUrl('https://example.com/', {
+      ...OPTIONS,
+      fetchImpl: () => Promise.resolve(endless()),
+    });
+
+    expect(trace.truncated).toBe(true);
+    expect(new TextEncoder().encode(trace.body).length).toBe(MAX_BODY_BYTES);
+    expect(trace.contentLength).toBe(99999999999);
+  });
+
+  test('a normal body is neither truncated nor guessed at', async () => {
+    const { fetch } = router({ 'https://example.com/': { status: 200, body: '<p>hi</p>' } });
+    const trace = await traceUrl('https://example.com/', { ...OPTIONS, fetchImpl: fetch });
+
+    expect(trace.truncated).toBe(false);
+    expect(trace.body).toBe('<p>hi</p>');
+  });
+});
+
+describe('address policy', () => {
+  test('refuses a redirect to a private address before issuing the request', async () => {
+    const { fetch, calls } = router({
+      'https://example.com/': { status: 302, location: 'http://169.254.169.254/latest/' },
+      'http://169.254.169.254/latest/': { status: 200, body: 'secret' },
+    });
+
+    await expect(
+      traceUrl('https://example.com/', { ...OPTIONS, fetchImpl: fetch, scanHost: 'example.com' }),
+    ).rejects.toThrow(/private or local address/);
+    expect(calls).toEqual(['https://example.com/']);
+  });
+
+  test('the scan host is followed even when it is a loopback address', async () => {
+    const { fetch } = router({
+      'http://127.0.0.1:8080/': { status: 301, location: 'http://127.0.0.1:8080/home' },
+      'http://127.0.0.1:8080/home': { status: 200, body: 'ok' },
+    });
+
+    const trace = await traceUrl('http://127.0.0.1:8080/', {
+      ...OPTIONS,
+      fetchImpl: fetch,
+      scanHost: '127.0.0.1',
+    });
+
+    expect(trace.status).toBe(200);
+    expect(trace.finalUrl).toBe('http://127.0.0.1:8080/home');
+  });
+
+  test('without a scan host, a private start URL is refused outright', async () => {
+    const { fetch, calls } = router({ 'http://localhost:9200/': { status: 200, body: '{}' } });
+
+    await expect(
+      traceUrl('http://localhost:9200/', { ...OPTIONS, fetchImpl: fetch }),
+    ).rejects.toThrow(/private or local address/);
+    expect(calls).toEqual([]);
   });
 });

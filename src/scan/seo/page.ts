@@ -14,6 +14,8 @@
  * *shape* of the raw bytes, and both say so where they are used.
  */
 
+import { stripElements } from '../text/html-scan.ts';
+
 export type MetaTag = { readonly name: string; readonly content: string };
 export type HreflangLink = { readonly hreflang: string; readonly href: string };
 export type ResourceRef = { readonly kind: string; readonly url: string };
@@ -64,9 +66,14 @@ const MOUNT_IDS: readonly string[] = ['root', 'app', '__next', '__nuxt', '___gat
  * prose no matter how the tree is shaped.
  */
 export function bodyText(html: string): string {
-  return html
-    .replace(/<!--[\s\S]*?-->/g, ' ')
-    .replace(/<(script|style|template|noscript)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, ' ')
+  // `stripElements` rather than a lazy cross-tag regex: on a document full of
+  // unclosed `<script>` tags the regex is quadratic, the scan is linear.
+  return stripElements(html.replace(/<!--[\s\S]*?-->/g, ' '), [
+    'script',
+    'style',
+    'template',
+    'noscript',
+  ])
     .replace(/<[^>]+>/g, ' ')
     .replace(/&[a-z#0-9]+;/gi, ' ');
 }

@@ -19,8 +19,13 @@ What you get in `./out/`:
 
 - [Bun](https://bun.sh) `>= 1.2` — the `webdiag` binary runs on Bun, so it must
   be installed even when you install via npm.
-- Chrome — downloaded automatically on install (Puppeteer's own build). Needed
-  for the performance and accessibility checks, which render the page for real.
+- Chrome — webdiag downloads its own pinned `chrome-headless-shell` build once,
+  on first use, into `~/.cache/puppeteer` (override the location with
+  `WEBDIAG_CHROME_CACHE_DIR`, or point at an existing binary with
+  `WEBDIAG_CHROME_PATH`). All three browser probes — performance, accessibility
+  and dependencies — launch that same binary, so `meta.json` records one
+  browser version. Nothing is written to the directory you run the command
+  from except the `--out` directory.
 - `curl` — needed for the security-headers check. Present by default on macOS
   and most Linux distributions.
 
@@ -120,7 +125,7 @@ webdiag scan <url> [--repo PATH] [--mode quick|deep] [--axes ...] [--pages N] [-
 | `--mode` | `quick` | `quick` checks one URL; `deep` follows internal links and samples several pages |
 | `--out` | `./webdiag-out` | Where `report.html`, `findings.json`, `summary.json` and `meta.json` are written |
 | `--axes` | all six | Comma-separated subset, e.g. `--axes PERF,A11Y,SEO,DEPS,SEC,AGENT` |
-| `--pages` | `1` quick / `5` deep | How many pages a `deep` run may sample |
+| `--pages` | `1` quick / `8` deep | How many pages a `deep` run may sample (5–10); rejected in `quick`, which is always one page |
 | `--repo` | none | Path to your repo checkout — enables the white-box dependency audit |
 | `--fail-on` | none | Exit `4` if any finding meets this severity or worse (`critical`, `high`, `medium`, `low`, `info`); a `blocking` finding always fails |
 
@@ -132,11 +137,16 @@ Other commands: `webdiag --help`, `webdiag --version`.
 |------|---------|-------------|
 | `0` | The scan completed | Read the report in `--out` |
 | `1` | Usage error (bad flag, missing URL) | Fix the command |
+| `2` | The command exists but is not implemented yet | Check the release notes |
 | `3` | The run could not produce artifacts | Check network / target availability |
 | `4` | Artifacts produced, but a `--fail-on` budget was exceeded | Gate a deploy or fail CI |
+| `5` | Artifacts produced, but at least one requested axis could not be measured | Fix the probe's tooling (Chrome, testssl, network) before trusting the score |
 
 A single probe failing never stops the whole scan: that axis is marked
-`failed` in the report and the other five still complete.
+`failed` in the report and the other five still complete. The exit code is
+`5` in that case, so a CI job whose browser never started does not pass
+looking identical to a clean site. A `--fail-on` breach (`4`) takes precedence
+when both apply.
 
 ## Use in CI
 

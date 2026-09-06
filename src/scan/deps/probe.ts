@@ -74,7 +74,11 @@ export function depsProbe(
           schema: RAW_SCHEMA_VERSION,
           axis: AXIS,
           tool: whiteboxToolFor(analysis),
-          target: { url: context.url, mode: context.mode },
+          // Stamped per document, not per run: `quick`/`deep` describe how many
+          // pages were read, `whitebox` describes where these findings came
+          // from. Every finding in this document was read off the checkout, and
+          // `findings.json` has to be able to say so.
+          target: { url: context.url, mode: 'whitebox' },
           observations: toWhiteboxObservations(analysis),
           notes: analysis.notes,
           ...(analysis.syft.sbom === undefined

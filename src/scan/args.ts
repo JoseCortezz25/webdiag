@@ -10,7 +10,11 @@ import type { Axis, Mode, Severity } from '../catalog/index.ts';
 import { AXES, SEVERITIES } from '../catalog/index.ts';
 import type { ScanRequest } from './orchestrator.ts';
 
-/** Modes reachable from the CLI. `whitebox` is implied by `--repo`, not asked for. */
+/**
+ * Modes reachable from the CLI. `whitebox` is not one of them: it is stamped
+ * on the findings the white-box DEPS probe produces when `--repo` is given,
+ * alongside a `quick` or `deep` run of the other axes.
+ */
 const CLI_MODES: readonly Mode[] = ['quick', 'deep'];
 
 export const DEFAULT_OUT_DIR = './webdiag-out';
@@ -22,8 +26,8 @@ const DEFAULT_PAGES: Readonly<Record<string, number>> = { quick: 1, deep: 8 };
  * The sampling window `deep` is defined by (issue #9). It is enforced here
  * rather than silently clamped in the crawler: an operator who asks for three
  * pages has misunderstood what the mode is, and a run that quietly gives them
- * eight teaches them nothing. `quick` ignores `--pages` entirely, so the bound
- * only applies where it means something.
+ * eight teaches them nothing. `quick` is always one page, so `--pages` there is
+ * rejected outright rather than accepted and ignored.
  */
 const DEEP_PAGE_RANGE = { min: 5, max: 10 } as const;
 
@@ -143,6 +147,10 @@ export function parseScanArgs(argv: readonly string[]): ScanArgsResult {
 
   if (!/^https?:\/\//i.test(url)) {
     return fail(`'${url}' is not an http(s) URL`);
+  }
+
+  if (mode !== 'deep' && pages !== undefined) {
+    return fail('--pages only applies to --mode deep: a quick run is always one page');
   }
 
   if (

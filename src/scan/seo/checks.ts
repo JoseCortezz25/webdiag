@@ -20,6 +20,7 @@
 import type { Confidence } from '../../catalog/index.ts';
 import type { RawObservation } from '../raw.ts';
 import type { SeoAnalysis } from './analysis.ts';
+import { MAX_BODY_BYTES } from './http.ts';
 import { metaContent, type PageDocument, resolveUrl } from './page.ts';
 import { pathOf, verdictFor } from './robots.ts';
 import { MAX_SITEMAP_BYTES, MAX_SITEMAP_URLS } from './sitemap.ts';
@@ -961,6 +962,33 @@ export function mergeObservations(
           : observation.evidence,
     };
   });
+}
+
+/**
+ * What this run could *not* see, in plain language, for `raw.notes`.
+ *
+ * Spec §7: a narrowed run has to say so. A sitemap cut at the fetch cap was not
+ * validated and its entries were not all counted; a `Sitemap:` line pointing
+ * off the site was not followed. Neither is a finding, and neither may be
+ * silent, because a shorter finding list otherwise reads as a cleaner site.
+ */
+export function coverageNotes(analysis: SeoAnalysis): readonly string[] {
+  const notes: string[] = [];
+  const sitemap = analysis.sitemap;
+
+  if (sitemap.truncated) {
+    notes.push(
+      `El sitemap ${sitemap.url ?? ''} supera el límite de lectura de ${Math.round(MAX_BODY_BYTES / (1024 * 1024))} MB: se leyó solo un prefijo, no se validó contra el esquema y el conteo de URLs es un mínimo.`,
+    );
+  }
+
+  if (sitemap.refused.length > 0) {
+    notes.push(
+      `robots.txt declara ${sitemap.refused.length} sitemap(s) fuera del sitio analizado y no se siguieron: ${sitemap.refused.join(', ')}.`,
+    );
+  }
+
+  return notes;
 }
 
 /**

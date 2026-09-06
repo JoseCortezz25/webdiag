@@ -12,6 +12,7 @@
  * "everything is allowed", which is the same answer as an empty file, and the
  * catalogue has no ID for it — correctly.
  */
+import { matchesRobotsPattern } from '../text/wildcard.ts';
 
 export type RobotsRule = { readonly type: 'allow' | 'disallow'; readonly path: string };
 export type RobotsGroup = {
@@ -134,19 +135,6 @@ export function parseRobots(body: string, url: string, status: number): RobotsFi
   };
 }
 
-/** Escapes a robots path pattern into a regex, keeping `*` and a trailing `$`. */
-function patternToRegExp(pattern: string): RegExp {
-  const anchored = pattern.endsWith('$');
-  const body = anchored ? pattern.slice(0, -1) : pattern;
-
-  const source = body
-    .split('*')
-    .map((part) => part.replace(/[.+?^${}()|[\]\\]/g, '\\$&'))
-    .join('.*');
-
-  return new RegExp(`^${source}${anchored ? '$' : ''}`);
-}
-
 /** The group that applies to `agent`: the most specific name match, else `*`. */
 export function groupFor(robots: RobotsFile, agent: string): RobotsGroup | undefined {
   const needle = agent.toLowerCase();
@@ -189,7 +177,7 @@ export function verdictFor(robots: RobotsFile, agent: string, path: string): Rob
     if (rule.path === '') {
       continue;
     }
-    if (!patternToRegExp(rule.path).test(path)) {
+    if (!matchesRobotsPattern(rule.path, path)) {
       continue;
     }
     if (winner === undefined) {

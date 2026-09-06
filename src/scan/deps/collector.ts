@@ -13,7 +13,21 @@
  * disk without ever starting Chrome.
  */
 import { basename } from 'node:path';
-import puppeteer, { type HTTPResponse, TimeoutError } from 'puppeteer';
+import puppeteer, {
+  type Browser,
+  type HTTPResponse,
+  type LaunchOptions,
+  TimeoutError,
+} from 'puppeteer';
+// The PERF module owns the Chrome pin; every browser probe launches that same
+// binary so `meta.json` records one browser, not three.
+import {
+  CHROME_TOOL_NAME,
+  headlessLaunchOptions,
+  type ResolvedChrome,
+  resolveChromeOnce,
+  sandboxArgs,
+} from '../perf/chrome.ts';
 import type { ProbeContext } from '../probe.ts';
 import type { ToolVersion } from '../raw.ts';
 import type { AssetCollection, JsAsset, SkippedAsset } from './assets.ts';
@@ -42,16 +56,14 @@ export const LIMITS = {
   maxTotalBytes: 48 * 1024 * 1024,
 } as const;
 
-/**
- * Chrome's sandbox stays on by default, because this probe loads whatever a
- * client site serves and that is untrusted code. Containers that cannot create
- * the user namespace it needs opt out explicitly, never by silent fallback.
- */
-function launchArgs(): readonly string[] {
-  return process.env.WEBDIAG_CHROME_NO_SANDBOX === '1'
-    ? ['--no-sandbox', '--disable-dev-shm-usage']
-    : [];
-}
+export type BrowserLauncher = (options: LaunchOptions) => Promise<Browser>;
+
+export type CollectorOptions = {
+  /** Injected in tests; production resolves the pinned build once per process. */
+  readonly chrome?: ResolvedChrome;
+  /** Injected in tests to assert what would be launched without launching it. */
+  readonly launch?: BrowserLauncher;
+};
 
 function isJavaScript(response: HTTPResponse): boolean {
   const url = response.url();
@@ -94,14 +106,63 @@ type PendingAsset = {
   readonly body: Promise<string | undefined>;
 };
 
-function isTimeout(cause: unknown): boolean {
-  return cause instanceof TimeoutError;
+/** What the collector has already committed to, for admitting the next response. */
+export type AdmissionState = {
+  readonly admitted: number;
+  /** Bytes declared by admitted responses that sent a `content-length`. */
+  readonly declaredBytes: number;
+};
+
+/**
+ * Decides, from the headers alone, whether a response body is worth reading.
+ *
+ * The budgets in `LIMITS` used to be applied only in `materialize`, after every
+ * body had already been requested and was sitting in memory — which is to say
+ * they bounded the disk and not the run. A `content-length` is a promise the
+ * server made, so a response that already declares itself over budget, or that
+ * arrives once the asset count is spent, is refused before a byte is read. A
+ * response without the header is admitted and measured in `materialize`.
+ */
+export function admit(
+  contentLength: number | undefined,
+  state: AdmissionState,
+): { readonly reason: SkippedAsset['reason']; readonly detail: string } | undefined {
+  if (state.admitted >= LIMITS.maxAssets) {
+    return {
+      reason: 'budget-exhausted',
+      detail: `The run already accepted ${state.admitted} bundles.`,
+    };
+  }
+
+  if (contentLength === undefined) {
+    return undefined;
+  }
+
+  if (contentLength > LIMITS.maxAssetBytes) {
+    return {
+      reason: 'too-large',
+      detail: `${contentLength} declared bytes exceeds the ${LIMITS.maxAssetBytes} byte per-asset budget.`,
+    };
+  }
+
+  if (state.declaredBytes + contentLength > LIMITS.maxTotalBytes) {
+    return {
+      reason: 'budget-exhausted',
+      detail: `${state.declaredBytes} bytes already declared; ${contentLength} more would exceed the ${LIMITS.maxTotalBytes} byte run budget.`,
+    };
+  }
+
+  return undefined;
 }
 
-/** `Chrome/152.0.7977.75` → `152.0.7977.75`. Falls back to the raw string. */
-async function browserVersion(browser: { version(): Promise<string> }): Promise<string> {
-  const raw = await browser.version();
-  return raw.split('/')[1] ?? raw;
+function declaredLength(response: HTTPResponse): number | undefined {
+  const raw = response.headers()['content-length'];
+  const parsed = raw === undefined ? Number.NaN : Number(raw.trim());
+  return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : undefined;
+}
+
+function isTimeout(cause: unknown): boolean {
+  return cause instanceof TimeoutError;
 }
 
 function originOf(url: string): string {
@@ -182,12 +243,21 @@ async function materialize(
   return { assets, skipped };
 }
 
-/** Loads the page and saves every JavaScript response it served. */
+/**
+ * Loads the page and saves every JavaScript response it served.
+ *
+ * The browser is the pinned `chrome-headless-shell`, resolved (and downloaded
+ * once if needed) by the PERF module — never puppeteer's own postinstall
+ * download, which a consumer install may legitimately have skipped.
+ */
 export async function collectServedScripts(
   context: ProbeContext,
   workspace: Workspace,
+  options: CollectorOptions = {},
 ): Promise<AssetCollection> {
-  const browser = await puppeteer.launch({ headless: true, args: [...launchArgs()] });
+  const chrome = options.chrome ?? (await resolveChromeOnce());
+  const launch = options.launch ?? ((launchOptions) => puppeteer.launch(launchOptions));
+  const browser = await launch(headlessLaunchOptions(chrome, sandboxArgs()));
 
   try {
     const page = await browser.newPage();
@@ -195,6 +265,8 @@ export async function collectServedScripts(
 
     const seen = new Set<string>();
     const pending: PendingAsset[] = [];
+    const refused: SkippedAsset[] = [];
+    let state: AdmissionState = { admitted: 0, declaredBytes: 0 };
 
     page.on('response', (response) => {
       const url = response.url();
@@ -204,6 +276,20 @@ export async function collectServedScripts(
       }
 
       seen.add(url);
+
+      const contentLength = declaredLength(response);
+      const refusal = admit(contentLength, state);
+
+      if (refusal !== undefined) {
+        refused.push({ url, ...refusal });
+        return;
+      }
+
+      state = {
+        admitted: state.admitted + 1,
+        declaredBytes: state.declaredBytes + (contentLength ?? 0),
+      };
+
       pending.push({
         url,
         status: response.status(),
@@ -234,13 +320,13 @@ export async function collectServedScripts(
     const pageUrl = page.url();
     const pageOrigin = originOf(pageUrl) || originOf(context.url);
     const { assets, skipped } = await materialize(pending, workspace, pageOrigin);
-    const chrome: ToolVersion = { name: 'chrome', version: await browserVersion(browser) };
+    const browserTool: ToolVersion = { name: CHROME_TOOL_NAME, version: chrome.version };
 
     return {
       directory: workspace.directory,
       assets,
-      skipped,
-      browser: chrome,
+      skipped: [...skipped, ...refused].sort((left, right) => (left.url < right.url ? -1 : 1)),
+      browser: browserTool,
       pageUrl,
       pageOrigin,
       navigationTimedOut,

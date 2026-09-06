@@ -1,4 +1,6 @@
 import { describe, expect, test } from 'bun:test';
+import { normalize } from '../../normalize.ts';
+import { RAW_SCHEMA_VERSION } from '../../raw.ts';
 import { toWhiteboxObservations } from './adapter.ts';
 import {
   cleanWhiteboxAnalysis,
@@ -111,6 +113,56 @@ describe('toWhiteboxObservations', () => {
     const finding = toWhiteboxObservations(analysis).find((o) => o.id === 'DEPS-LIB-UNMAINTAINED');
     expect(finding).toBeDefined();
     expect(finding?.affected).toEqual(['left-pad@1.3.0']);
+    expect(finding?.count).toBe(1);
+  });
+
+  test('DEPS-LIB-UNMAINTAINED: one repository publishing three packages is accepted by the catalog', () => {
+    // Regression: `count` used to be the number of repositories while
+    // `affected` listed the packages, which tripped the finding schema's
+    // `affected.length <= count` invariant and silently dropped the finding.
+    const repository = 'https://github.com/left-pad/left-pad';
+    const analysis = whiteboxAnalysis({
+      npm: npmLookup({
+        facts: {
+          'left-pad@1.3.0': npmFacts({ name: 'left-pad', version: '1.3.0' }),
+          'right-pad@1.0.0': npmFacts({ name: 'right-pad', version: '1.0.0' }),
+          'center-pad@2.0.0': npmFacts({ name: 'center-pad', version: '2.0.0' }),
+        },
+      }),
+      scorecard: scorecardLookup({ verdicts: { [repository]: maintenanceVerdict({ score: 0 }) } }),
+    });
+
+    const finding = toWhiteboxObservations(analysis).find((o) => o.id === 'DEPS-LIB-UNMAINTAINED');
+    expect(finding?.count).toBe(3);
+    expect(finding?.affected).toEqual(['center-pad@2.0.0', 'left-pad@1.3.0', 'right-pad@1.0.0']);
+    expect(finding?.evidence.repository_count).toBe(1);
+
+    const { findings, rejected } = normalize([
+      {
+        schema: RAW_SCHEMA_VERSION,
+        axis: 'DEPS',
+        tool: { name: 'osv-scanner', version: '2.0.0' },
+        target: { url: 'https://example.test/', mode: 'quick' },
+        observations: toWhiteboxObservations(analysis),
+      },
+    ]);
+
+    expect(rejected).toEqual([]);
+    expect(findings.map((finding) => finding.id)).toContain('DEPS-LIB-UNMAINTAINED');
+  });
+
+  test('DEPS-LIB-UNMAINTAINED: a repository no package points back to is listed by its URL', () => {
+    const repository = 'https://github.com/orphan/orphan';
+    const analysis = whiteboxAnalysis({
+      npm: npmLookup({ facts: {} }),
+      scorecard: scorecardLookup({
+        verdicts: { [repository]: maintenanceVerdict({ repository, score: 0 }) },
+      }),
+    });
+
+    const finding = toWhiteboxObservations(analysis).find((o) => o.id === 'DEPS-LIB-UNMAINTAINED');
+    expect(finding?.count).toBe(1);
+    expect(finding?.affected).toEqual([repository]);
   });
 
   test('a Scorecard verdict above the floor is not reported', () => {

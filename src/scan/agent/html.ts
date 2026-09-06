@@ -13,6 +13,8 @@
  * number instead of having to trust it.
  */
 
+import { elementSpans, stripElements } from '../text/html-scan.ts';
+
 /** Landmark elements a text-mode agent can navigate by. */
 const LANDMARK_TAGS = ['main', 'nav', 'header', 'footer', 'aside'] as const;
 
@@ -70,15 +72,14 @@ function stripTags(html: string): string {
   return html.replace(/<[^>]*>/g, ' ');
 }
 
+/** Elements whose content is never visible text. */
+const INERT_ELEMENTS = ['script', 'style', 'template', 'noscript'] as const;
+
 /** Visible text: markup, scripts, styles and inert templates removed. */
 function visibleText(html: string): string {
-  const stripped = html
-    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, ' ')
-    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, ' ')
-    .replace(/<template\b[^>]*>[\s\S]*?<\/template>/gi, ' ')
-    .replace(/<noscript\b[^>]*>[\s\S]*?<\/noscript>/gi, ' ');
-
-  return decodeEntities(stripTags(stripped)).replace(/\s+/g, ' ').trim();
+  return decodeEntities(stripTags(stripElements(html, INERT_ELEMENTS)))
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 function countMatches(html: string, pattern: RegExp): number {
@@ -200,16 +201,22 @@ function isNamed(openTag: string, inner: string): boolean {
  * Anchors without `href` are skipped: they are not controls, and counting them
  * would inflate the number with markup that no client treats as interactive.
  */
+/**
+ * How many controls one page is examined for. Past this the counts are lower
+ * bounds; no real page has this many links, and a page that does is trying to
+ * make the probe do quadratic work.
+ */
+const MAX_CONTROLS = 20_000;
+
 function countNamed(body: string): Named {
-  const pattern = /<(a|button)\b([^>]*)>([\s\S]*?)<\/\1>/gi;
   let total = 0;
   let unnamed = 0;
 
-  for (const match of body.matchAll(pattern)) {
-    const tag = match[1]?.toLowerCase() ?? '';
-    const attributes = match[2] ?? '';
-    const inner = match[3] ?? '';
-
+  // `elementSpans` hands back disjoint contents in linear time. The regex it
+  // replaces — `<(a|button)\b([^>]*)>([\s\S]*?)<\/\1>` — re-scanned to the end
+  // of the document for every unclosed `<a>`, which on a 2 MB body meant
+  // minutes of blocked event loop under the control of the page being scanned.
+  for (const { tag, attributes, inner } of elementSpans(body, ['a', 'button'], MAX_CONTROLS)) {
     if (tag === 'a' && !hasAttribute(`<a ${attributes}>`, 'href')) {
       continue;
     }

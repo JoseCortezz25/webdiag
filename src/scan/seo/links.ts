@@ -51,6 +51,12 @@ type LycheeOutput = {
 /** Reported per link, so a page with 200 dead links does not produce a 200-row table. */
 const MAX_REPORTED_LINKS = 25;
 
+/** `lychee --version` answers instantly; anything longer is a wedged binary. */
+const VERSION_TIMEOUT_MS = 10_000;
+
+/** After SIGTERM, how long lychee gets to exit on its own before SIGKILL. */
+export const KILL_GRACE_MS = 2_000;
+
 export type LinkCheckOptions = {
   readonly timeoutMs: number;
   /** Injected so the unit tests never spawn a process or touch the network. */
@@ -127,10 +133,17 @@ function unavailable(outcome: LinkReport['outcome'], detail: string): LinkReport
 /** `lychee 0.24.2` → `0.24.2`. */
 export async function lycheeVersion(): Promise<string | undefined> {
   try {
-    const process = Bun.spawn(['lychee', '--version'], { stdout: 'pipe', stderr: 'pipe' });
+    const process = Bun.spawn(['lychee', '--version'], {
+      stdout: 'pipe',
+      stderr: 'pipe',
+      timeout: VERSION_TIMEOUT_MS,
+    });
+    // Both pipes are drained: a child that fills an undrained stderr blocks on
+    // write and `exited` never resolves.
     const [exitCode, stdout] = await Promise.all([
       process.exited,
       new Response(process.stdout).text(),
+      new Response(process.stderr).text(),
     ]);
 
     if (exitCode !== 0) {
@@ -188,12 +201,30 @@ export async function checkLinks(
     return unavailable('unavailable', cause instanceof Error ? cause.message : String(cause));
   }
 
-  const timer = setTimeout(() => child.kill(), options.timeoutMs);
+  // SIGTERM first so lychee can flush what it has; SIGKILL if it ignores that.
+  // Without the escalation a child that traps SIGTERM keeps `exited` pending
+  // forever, and the whole axis with it.
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    child.kill('SIGTERM');
+    setTimeout(() => {
+      if (child.exitCode === null && child.signalCode === null) {
+        child.kill('SIGKILL');
+      }
+    }, KILL_GRACE_MS).unref();
+  }, options.timeoutMs);
 
   try {
-    const [, stdout] = await Promise.all([child.exited, new Response(child.stdout).text()]);
+    // stderr is drained alongside stdout: lychee writes its progress and
+    // warnings there, and a full, unread pipe blocks the child on write.
+    const [, stdout] = await Promise.all([
+      child.exited,
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+    ]);
 
-    if (child.killed && stdout.trim() === '') {
+    if (timedOut && stdout.trim() === '') {
       return unavailable('timeout', `lychee exceeded ${options.timeoutMs} ms`);
     }
 

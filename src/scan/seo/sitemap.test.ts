@@ -10,7 +10,7 @@
  * run and `meta.json` still records that it was missing.
  */
 import { describe, expect, test } from 'bun:test';
-import type { Fetcher } from './http.ts';
+import { type Fetcher, MAX_BODY_BYTES } from './http.ts';
 import {
   inspectSitemap,
   MAX_SITEMAP_URLS,
@@ -175,6 +175,94 @@ describe('inspectSitemap discovery', () => {
     expect(report.entryCount).toBe(120);
     expect(report.byteLength).toBe(new TextEncoder().encode(many).length);
     expect(report.entryCount).toBeLessThan(MAX_SITEMAP_URLS);
+  });
+
+  test('a sitemap longer than the fetch cap is reported as truncated and not validated', async () => {
+    // Regression: the body used to be read whole and then sliced, so the size
+    // limit could never fire and a cut document was handed to the validator.
+    let validated = 0;
+    const counting: XmllintRunner = () => {
+      validated += 1;
+      return Promise.resolve({ ok: true, stderr: '' });
+    };
+    const huge = (): Response => {
+      const head = new TextEncoder().encode(
+        '<?xml version="1.0"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
+      );
+      const entry = new TextEncoder().encode('<url><loc>https://example.com/x</loc></url>');
+      let sent = 0;
+      const stream = new ReadableStream<Uint8Array>({
+        pull(controller) {
+          controller.enqueue(sent === 0 ? head : entry);
+          sent += 1;
+        },
+      });
+      return new Response(stream, {
+        status: 200,
+        headers: { 'content-type': 'application/xml', 'content-length': String(60 * 1024 * 1024) },
+      });
+    };
+
+    const report = await inspectSitemap(ORIGIN, [], {
+      timeoutMs: 1_000,
+      fetchImpl: () => Promise.resolve(huge()),
+      runXmllint: counting,
+    });
+
+    expect(report.found).toBe(true);
+    expect(report.truncated).toBe(true);
+    expect(report.validation).toBeUndefined();
+    expect(validated).toBe(0);
+    // The declared size carries through, so the 50 MB limit is checkable.
+    expect(report.byteLength).toBe(60 * 1024 * 1024);
+    expect(report.entryCount).toBeGreaterThan(0);
+  });
+
+  test('a truncated sitemap with no content-length reports at least the cap', async () => {
+    const endless = (): Response => {
+      const head = new TextEncoder().encode(
+        '<?xml version="1.0"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
+      );
+      const entry = new TextEncoder().encode('<url><loc>https://example.com/x</loc></url>');
+      let sent = 0;
+      const stream = new ReadableStream<Uint8Array>({
+        pull(controller) {
+          controller.enqueue(sent === 0 ? head : entry);
+          sent += 1;
+        },
+      });
+      return new Response(stream, { status: 200, headers: { 'content-type': 'application/xml' } });
+    };
+
+    const report = await inspectSitemap(
+      ORIGIN,
+      [],
+      options(() => Promise.resolve(endless())),
+    );
+
+    expect(report.truncated).toBe(true);
+    expect(report.byteLength).toBeGreaterThanOrEqual(MAX_BODY_BYTES);
+  });
+
+  test('a Sitemap: line pointing off the site is recorded as refused and never fetched', async () => {
+    const calls: string[] = [];
+    const fetchImpl: Fetcher = (url) => {
+      calls.push(url);
+      return serve({ [CONVENTIONAL]: VALID_SITEMAP })(url, {});
+    };
+
+    const report = await inspectSitemap(
+      ORIGIN,
+      ['http://169.254.169.254/latest/', 'https://cdn.example.com/sitemap.xml', CONVENTIONAL],
+      options(fetchImpl),
+    );
+
+    expect(report.refused).toEqual(['http://169.254.169.254/latest/']);
+    expect(report.candidates).not.toContain('http://169.254.169.254/latest/');
+    expect(calls).not.toContain('http://169.254.169.254/latest/');
+    // A subdomain of the scanned site is still the site.
+    expect(report.candidates).toContain('https://cdn.example.com/sitemap.xml');
+    expect(report.found).toBe(true);
   });
 
   test('a validator that throws degrades the check instead of inventing a verdict', async () => {

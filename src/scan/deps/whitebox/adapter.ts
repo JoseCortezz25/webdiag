@@ -275,9 +275,17 @@ function unmaintainedObservation(analysis: WhiteboxAnalysis): readonly RawObserv
     packagesByRepository.set(fact.repository, packages);
   }
 
+  // `count` and `affected` share one unit — the installed packages — because the
+  // finding schema requires `affected.length <= count`. A repository that
+  // publishes three packages is three affected places; a repository no package
+  // fact points back to is listed by its own URL so the finding still has a
+  // place to point at. The per-repository breakdown lives in `evidence`.
   const affected = [
     ...new Set(
-      unmaintained.flatMap((verdict) => packagesByRepository.get(verdict.repository) ?? []),
+      unmaintained.flatMap((verdict) => {
+        const packages = packagesByRepository.get(verdict.repository) ?? [];
+        return packages.length === 0 ? [verdict.repository] : packages;
+      }),
     ),
   ].sort();
 
@@ -285,9 +293,10 @@ function unmaintainedObservation(analysis: WhiteboxAnalysis): readonly RawObserv
     {
       id: 'DEPS-LIB-UNMAINTAINED',
       confidence: CONFIDENCE,
-      count: unmaintained.length,
+      count: affected.length,
       affected,
       evidence: {
+        repository_count: unmaintained.length,
         repositories: unmaintained.map((verdict) => ({
           repository: verdict.repository,
           maintained_score: verdict.score,

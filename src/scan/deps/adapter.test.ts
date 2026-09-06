@@ -225,6 +225,52 @@ describe('DEPS-LIB-OUTDATED', () => {
 
     expect(idsOf(analysis)).toContain('DEPS-LIB-OUTDATED');
   });
+
+  test('one outdated library served from two bundles is accepted by the catalog', () => {
+    // Regression: `count` used to be the number of libraries while `affected`
+    // listed the assets, so two assets for one library tripped the schema's
+    // `affected.length <= count` invariant and the finding was silently
+    // rejected — the axis scored as if the library were current.
+    const analysis = depsAnalysis({
+      collection: assetCollection({
+        assets: [
+          jsAsset({
+            url: `${FIXTURE_ORIGIN}/assets/vendor.js`,
+            path: '/tmp/webdiag-deps-fixture/000-vendor.js',
+            file: '000-vendor.js',
+          }),
+          jsAsset({
+            url: `${FIXTURE_ORIGIN}/assets/legacy.js`,
+            path: '/tmp/webdiag-deps-fixture/001-legacy.js',
+            file: '001-legacy.js',
+          }),
+        ],
+      }),
+      retire: retireReport([
+        { file: '/tmp/webdiag-deps-fixture/000-vendor.js', results: [retireResult()] },
+        { file: '/tmp/webdiag-deps-fixture/001-legacy.js', results: [retireResult()] },
+      ]),
+      enrichment: enrichment({ registry: { available: true, latest: { jquery: '4.0.0' } } }),
+    });
+
+    const outdated = observation(analysis, 'DEPS-LIB-OUTDATED');
+    expect(outdated.count).toBe(2);
+    expect(outdated.affected).toEqual(['/assets/legacy.js', '/assets/vendor.js']);
+    expect(outdated.evidence.library_count).toBe(1);
+
+    const { findings, rejected } = normalize([
+      {
+        schema: RAW_SCHEMA_VERSION,
+        axis: 'DEPS',
+        tool: { name: 'retire.js', version: '5.7.0' },
+        target: { url: `${FIXTURE_ORIGIN}/`, mode: 'quick' },
+        observations: toObservations(analysis),
+      },
+    ]);
+
+    expect(rejected).toEqual([]);
+    expect(findings.map((finding) => finding.id)).toContain('DEPS-LIB-OUTDATED');
+  });
 });
 
 describe('DEPS-SOURCEMAP-EXPOSED', () => {

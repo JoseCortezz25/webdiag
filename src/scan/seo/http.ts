@@ -12,6 +12,8 @@
  * tested without a socket.
  */
 import { VERSION } from '../../version.ts';
+import { refusalFor } from '../net/address-guard.ts';
+import { readBodyCapped } from '../net/body.ts';
 
 /** Honest, and it says who to contact. A UA that lies is a UA nobody can block. */
 export const USER_AGENT = `Mozilla/5.0 (compatible; webdiag/${VERSION}; +https://github.com/JoseCortezz25/webdiag)`;
@@ -19,8 +21,11 @@ export const USER_AGENT = `Mozilla/5.0 (compatible; webdiag/${VERSION}; +https:/
 /** Google gives up at 5 hops; 10 is enough to see a loop before we do. */
 const MAX_HOPS = 10;
 
-/** Bodies past this are truncated before parsing. A 2 MB HTML page is already pathological. */
-const MAX_BODY_BYTES = 2 * 1024 * 1024;
+/**
+ * Bodies past this are cut *while streaming*, so the cap bounds memory and not
+ * just what reaches the parser. A 2 MB HTML page is already pathological.
+ */
+export const MAX_BODY_BYTES = 2 * 1024 * 1024;
 
 export type Hop = {
   readonly url: string;
@@ -37,6 +42,12 @@ export type FetchTrace = {
   readonly headers: Readonly<Record<string, string>>;
   readonly body: string;
   readonly truncated: boolean;
+  /**
+   * The `content-length` the terminal response declared, when it sent a usable
+   * one. It is what lets a size limit be checked on a body that was cut at the
+   * cap: the header describes the whole document, the cap only what was read.
+   */
+  readonly contentLength: number | undefined;
   /** Redirect hops only. The terminal response is not a hop. */
   readonly hops: readonly Hop[];
   /** True when a URL repeated, or when the chain outran `MAX_HOPS`. */
@@ -51,7 +62,27 @@ export type TraceOptions = {
   readonly fetchImpl?: Fetcher;
   /** `false` skips reading the body — used for the canonical target probe. */
   readonly readBody?: boolean;
+  /**
+   * The hostname the operator pointed the scan at. Redirects and derived URLs
+   * may lead anywhere public, and back to this host even when it is private;
+   * they may not lead to any *other* private, loopback or link-local address.
+   * Left undefined, only public addresses are followed.
+   */
+  readonly scanHost?: string | undefined;
+  /** `Accept` header for the request. Defaults to what a browser sends for a page. */
+  readonly accept?: string;
 };
+
+const PAGE_ACCEPT = 'text/html,application/xhtml+xml,*/*;q=0.8';
+
+/** Throws when the address policy refuses `url`, so no request is ever issued. */
+function assertAllowed(url: string, options: TraceOptions): void {
+  const refusal = refusalFor(url, { scanHost: options.scanHost });
+
+  if (refusal !== undefined) {
+    throw new Error(refusal);
+  }
+}
 
 function headersOf(response: Response): Readonly<Record<string, string>> {
   return Object.fromEntries(
@@ -63,11 +94,16 @@ function isRedirect(status: number): boolean {
   return status === 301 || status === 302 || status === 303 || status === 307 || status === 308;
 }
 
-async function readBody(response: Response): Promise<{ body: string; truncated: boolean }> {
-  const text = await response.text();
-  return text.length > MAX_BODY_BYTES
-    ? { body: text.slice(0, MAX_BODY_BYTES), truncated: true }
-    : { body: text, truncated: false };
+async function readBody(
+  response: Response,
+): Promise<{ body: string; truncated: boolean; contentLength: number | undefined }> {
+  const { body, truncated, contentLength } = await readBodyCapped(response, MAX_BODY_BYTES);
+  return { body, truncated, contentLength };
+}
+
+/** Discards a body we are not going to read, so the connection is released. */
+async function discardBody(response: Response): Promise<void> {
+  await response.body?.cancel().catch(() => undefined);
 }
 
 /**
@@ -85,17 +121,37 @@ export async function traceUrl(url: string, options: TraceOptions): Promise<Fetc
   let current = url;
 
   for (let attempt = 0; attempt <= MAX_HOPS; attempt += 1) {
+    // Every hop is checked, not just the first: the first URL is the
+    // operator's, every later one was chosen by the site being scanned.
+    assertAllowed(current, options);
+
     const response = await call(current, {
       redirect: 'manual',
       signal: AbortSignal.timeout(options.timeoutMs),
-      headers: { 'user-agent': USER_AGENT, accept: 'text/html,application/xhtml+xml,*/*;q=0.8' },
+      headers: { 'user-agent': USER_AGENT, accept: options.accept ?? PAGE_ACCEPT },
     });
 
     const headers = headersOf(response);
 
     if (!isRedirect(response.status)) {
-      const { body, truncated } =
-        options.readBody === false ? { body: '', truncated: false } : await readBody(response);
+      if (options.readBody === false) {
+        await discardBody(response);
+
+        return {
+          requestedUrl: url,
+          finalUrl: current,
+          status: response.status,
+          headers,
+          body: '',
+          truncated: false,
+          contentLength: undefined,
+          hops,
+          loop: false,
+          loopAt: undefined,
+        };
+      }
+
+      const { body, truncated, contentLength } = await readBody(response);
 
       return {
         requestedUrl: url,
@@ -104,11 +160,14 @@ export async function traceUrl(url: string, options: TraceOptions): Promise<Fetc
         headers,
         body,
         truncated,
+        contentLength,
         hops,
         loop: false,
         loopAt: undefined,
       };
     }
+
+    await discardBody(response);
 
     const location = headers.location;
     hops.push({ url: current, status: response.status, location });
@@ -122,6 +181,7 @@ export async function traceUrl(url: string, options: TraceOptions): Promise<Fetc
         headers,
         body: '',
         truncated: false,
+        contentLength: undefined,
         hops,
         loop: false,
         loopAt: undefined,
@@ -138,6 +198,7 @@ export async function traceUrl(url: string, options: TraceOptions): Promise<Fetc
         headers,
         body: '',
         truncated: false,
+        contentLength: undefined,
         hops,
         loop: true,
         loopAt: next,
@@ -157,25 +218,39 @@ export async function traceUrl(url: string, options: TraceOptions): Promise<Fetc
     headers: {},
     body: '',
     truncated: false,
+    contentLength: undefined,
     hops,
     loop: true,
     loopAt: current,
   };
 }
 
-/** Fetches a text resource without following it anywhere. Used for robots and sitemaps. */
-export async function fetchText(
-  url: string,
-  options: TraceOptions,
-): Promise<{ readonly status: number; readonly body: string; readonly finalUrl: string }> {
-  const call = options.fetchImpl ?? fetch;
+export type TextResource = {
+  readonly status: number;
+  readonly body: string;
+  readonly finalUrl: string;
+  /** True when the body was cut at `MAX_BODY_BYTES`; `body` is then a prefix. */
+  readonly truncated: boolean;
+  /** Declared size of the whole resource, when the server said. */
+  readonly contentLength: number | undefined;
+};
 
-  const response = await call(url, {
-    redirect: 'follow',
-    signal: AbortSignal.timeout(options.timeoutMs),
-    headers: { 'user-agent': USER_AGENT, accept: '*/*' },
-  });
+/**
+ * Fetches a text resource such as robots.txt or a sitemap.
+ *
+ * Redirects are followed through the same walk as `traceUrl`, so every hop is
+ * subject to the address policy: a `Sitemap:` line that redirects to an
+ * internal address is refused, not fetched. A chain that loops or outruns the
+ * hop limit surfaces as its terminal status with an empty body.
+ */
+export async function fetchText(url: string, options: TraceOptions): Promise<TextResource> {
+  const trace = await traceUrl(url, { ...options, accept: options.accept ?? '*/*' });
 
-  const { body } = await readBody(response);
-  return { status: response.status, body, finalUrl: response.url === '' ? url : response.url };
+  return {
+    status: trace.status,
+    body: trace.body,
+    finalUrl: trace.finalUrl,
+    truncated: trace.truncated,
+    contentLength: trace.contentLength,
+  };
 }

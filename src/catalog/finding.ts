@@ -47,8 +47,12 @@ export const findingSchema = z
     tool: z.string().min(1),
     mode: modeSchema,
     remediation: z.string().min(1),
-    /** Authoritative reference backing the remediation, when one exists. */
-    doc_ref: z.url().optional(),
+    /**
+     * Authoritative reference backing the remediation, when one exists. Only
+     * `http(s)`: the report renders it as a link, and some probes read it off
+     * the audited page, which must not be able to place a `javascript:` URL there.
+     */
+    doc_ref: z.url({ protocol: /^https?$/ }).optional(),
     /** Human-facing headline. Falls back to the catalogue meaning when absent. */
     title: z.string().min(1).optional(),
   })

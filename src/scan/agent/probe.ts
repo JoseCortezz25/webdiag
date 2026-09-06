@@ -83,13 +83,18 @@ export async function collectSignals(
   };
 }
 
+/** The default fetcher trusts exactly the host the operator named, nothing else private. */
+function fetcherFor(context: ProbeContext): Fetcher {
+  return httpFetcher({ scanHost: new URL(context.url).hostname });
+}
+
 /** The fetcher is injectable: the same seam a test uses, no test-only branch. */
-export function agentProbe(fetcher: Fetcher = httpFetcher()): Probe {
+export function agentProbe(fetcher?: Fetcher): Probe {
   return {
     axis: AXIS,
     tool: AGENT_TOOL,
     async run(context: ProbeContext): Promise<RawDocument> {
-      const signals = await collectSignals(fetcher, context);
+      const signals = await collectSignals(fetcher ?? fetcherFor(context), context);
 
       return {
         schema: RAW_SCHEMA_VERSION,

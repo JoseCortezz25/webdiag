@@ -53,7 +53,7 @@ export const rawObservationSchema = z.object({
   remediation: z.string().min(1),
   /** Only when the run justifies deviating from the catalogue base severity. */
   severity: severitySchema.optional(),
-  doc_ref: z.url().optional(),
+  doc_ref: z.url({ protocol: /^https?$/ }).optional(),
   title: z.string().min(1).optional(),
 });
 
