@@ -2,3 +2,10 @@
 node_modules/
 dist/
 *.log
+
+# Bun
+.bun/
+
+# Editors
+.idea/
+.vscode/
