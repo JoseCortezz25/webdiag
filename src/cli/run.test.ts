@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, test } from 'bun:test';
 import type { ArtifactWriter } from '../scan/index.ts';
+import { stubProbes } from '../scan/stub-probe.ts';
 import { COMMANDS } from './commands.ts';
 import { EXIT } from './exit-codes.ts';
 import { type CliOutput, runCli } from './run.ts';
@@ -16,7 +17,12 @@ function makeOutput(): CliOutput & { out: string[]; err: string[] } {
   };
 }
 
-/** Keeps `runCli` off the real filesystem while still exercising the dispatch. */
+/**
+ * Keeps `runCli` off the real filesystem while still exercising the dispatch.
+ * Its counterpart is `probes: stubProbes()` below, which keeps it off the
+ * network: the default registry runs the real SEC probe, and these tests are
+ * about argument dispatch, not about what a live host answered.
+ */
 function memoryWriter(): ArtifactWriter & { files: Map<string, string> } {
   const files = new Map<string, string>();
 
@@ -79,7 +85,10 @@ describe('runCli', () => {
 
   test('dispatches scan and reports every artifact it wrote', async () => {
     const writer = memoryWriter();
-    const code = await runCli(['scan', 'https://example.com', '--out', '/tmp/x'], io, { writer });
+    const code = await runCli(['scan', 'https://example.com', '--out', '/tmp/x'], io, {
+      writer,
+      probes: stubProbes(),
+    });
 
     expect(code).toBe(EXIT.OK);
     expect([...writer.files.keys()]).toContain('/tmp/x/findings.json');
@@ -96,6 +105,7 @@ describe('runCli', () => {
   test('reports a per-axis score line and never a composite one', async () => {
     await runCli(['scan', 'https://example.com', '--out', '/tmp/x'], io, {
       writer: memoryWriter(),
+      probes: stubProbes(),
     });
     const stdout = io.out.join('\n');
 

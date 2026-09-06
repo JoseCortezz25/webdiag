@@ -34,11 +34,17 @@ const REQUEST: ScanRequest = {
 
 const FIXED_CLOCK = () => new Date('2026-09-06T12:00:00.000Z');
 
-async function scan(overrides: Partial<ScanRequest> = {}, probes?: readonly Probe[]) {
+/**
+ * Always explicit about its probes. `runScan`'s own default is the real
+ * registry, which for SEC means curl and testssl.sh against a live host: these
+ * tests are about the orchestrator's wiring, and they answer for it only if
+ * nothing in them depends on what a third party served today.
+ */
+async function scan(overrides: Partial<ScanRequest> = {}, probes: readonly Probe[] = stubProbes()) {
   const writer = memoryWriter();
   const result = await runScan(
     { ...REQUEST, ...overrides },
-    { writer, clock: FIXED_CLOCK, ...(probes === undefined ? {} : { probes }) },
+    { writer, clock: FIXED_CLOCK, probes },
   );
 
   return { writer, result };
