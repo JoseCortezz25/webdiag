@@ -24,6 +24,7 @@ import {
 } from '../catalog/index.ts';
 import type { RejectedObservation } from './normalize.ts';
 import type { ProbeOutcome } from './probe.ts';
+import type { ToolComponent } from './raw.ts';
 
 export const SUMMARY_SCHEMA_VERSION = 'webdiag.summary/1';
 
@@ -55,6 +56,9 @@ export type FindingSummary = {
 export type ProbeSummary = {
   readonly axis: Axis;
   readonly tool: string;
+  /** Kept structured rather than folded into `tool`: the report shows the
+   *  Chrome build, and a consumer comparing two runs has to diff it. */
+  readonly components: readonly ToolComponent[] | undefined;
   readonly status: ProbeOutcome['status'];
   readonly error: string | undefined;
 };
@@ -145,6 +149,7 @@ function probeSummary(outcome: ProbeOutcome): ProbeSummary {
   return {
     axis: outcome.axis,
     tool: `${outcome.tool.name}@${outcome.tool.version}`,
+    components: outcome.tool.components,
     status: outcome.status,
     error: outcome.status === 'failed' ? outcome.error : undefined,
   };
@@ -197,7 +202,13 @@ export function buildSummary(input: SummaryInput): Summary {
     const outcome = outcomeByAxis.get(axis);
     const probe: ProbeSummary =
       outcome === undefined
-        ? { axis, tool: 'none', status: 'failed', error: 'No probe registered for this axis.' }
+        ? {
+            axis,
+            tool: 'none',
+            components: undefined,
+            status: 'failed',
+            error: 'No probe registered for this axis.',
+          }
         : probeSummary(outcome);
 
     return axisSummary(scores[axis], probe);

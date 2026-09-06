@@ -115,23 +115,40 @@ function findingList(findings: readonly FindingSummary[], empty: string): string
   return findings.map(findingCard).join('');
 }
 
+/**
+ * An axis whose probe never ran has no findings, and an axis with no findings
+ * scores 100. Printing that number would turn a browser that failed to start
+ * into a perfect result — the exact "reporte como certificado" failure spec §9
+ * warns about. So a failed axis shows no score at all.
+ */
+function unmeasured(axis: AxisSummary): boolean {
+  return axis.probe.status === 'failed';
+}
+
+function scoreMarkup(axis: AxisSummary): string {
+  return unmeasured(axis)
+    ? '<span class="axis-score unmeasured">sin medir</span>'
+    : `<span class="axis-score">${axis.score}<small>/${axis.maxScore}</small></span>`;
+}
+
 function axisCard(axis: AxisSummary): string {
-  const state = axis.zeroed
-    ? 'zeroed'
-    : axis.score >= 90
-      ? 'good'
-      : axis.score >= 70
-        ? 'fair'
-        : 'poor';
-  const probe =
-    axis.probe.status === 'failed'
-      ? `<p class="probe-failed">Probe no disponible: ${escapeHtml(axis.probe.error ?? 'error desconocido')}</p>`
-      : '';
+  const state = unmeasured(axis)
+    ? 'unmeasured'
+    : axis.zeroed
+      ? 'zeroed'
+      : axis.score >= 90
+        ? 'good'
+        : axis.score >= 70
+          ? 'fair'
+          : 'poor';
+  const probe = unmeasured(axis)
+    ? `<p class="probe-failed">Probe no disponible: ${escapeHtml(axis.probe.error ?? 'error desconocido')}</p>`
+    : '';
 
   return [
     `<a class="axis-card ${state}" href="#axis-${escapeHtml(axis.axis)}">`,
     `<span class="axis-name">${escapeHtml(axisLabel(axis.axis))}</span>`,
-    `<span class="axis-score">${axis.score}<small>/${axis.maxScore}</small></span>`,
+    scoreMarkup(axis),
     axis.zeroed ? '<span class="axis-note">Anulado por hallazgo bloqueante</span>' : '',
     `<span class="axis-meta">${axis.counts.scored} hallazgos puntuados</span>`,
     probe,
@@ -167,6 +184,21 @@ function deductionTable(axis: AxisSummary): string {
   ].join('');
 }
 
+/**
+ * The tool line. It names the sub-tool versions too, because a Performance score
+ * measured by a different Chrome build is not comparable to last quarter's and
+ * the reader has no other way to notice (spec §9).
+ */
+function toolLine(axis: AxisSummary): string {
+  const components = (axis.probe.components ?? [])
+    .map((component) => `${component.name}@${component.version}`)
+    .join(', ');
+
+  const suffix = components === '' ? '' : ` (<code>${escapeHtml(components)}</code>)`;
+
+  return `<p class="tool">Herramienta: <code>${escapeHtml(axis.probe.tool)}</code>${suffix} · estado <code>${escapeHtml(axis.probe.status)}</code></p>`;
+}
+
 function axisSection(axis: AxisSummary): string {
   const mentions =
     axis.mentions.length === 0
@@ -190,9 +222,11 @@ function axisSection(axis: AxisSummary): string {
     `<section class="axis" id="axis-${escapeHtml(axis.axis)}">`,
     '<header class="axis-header">',
     `<h2>${escapeHtml(axisLabel(axis.axis))} <span class="axis-code">${escapeHtml(axis.axis)}</span></h2>`,
-    `<p class="axis-score-inline">${axis.score}<small>/${axis.maxScore}</small></p>`,
+    unmeasured(axis)
+      ? '<p class="axis-score-inline unmeasured">sin medir</p>'
+      : `<p class="axis-score-inline">${axis.score}<small>/${axis.maxScore}</small></p>`,
     '</header>',
-    `<p class="tool">Herramienta: <code>${escapeHtml(axis.probe.tool)}</code> · estado <code>${escapeHtml(axis.probe.status)}</code></p>`,
+    toolLine(axis),
     deductionTable(axis),
     findingList(axis.findings, 'Sin hallazgos puntuados en este eje.'),
     mentions,
@@ -262,6 +296,8 @@ a{color:var(--accent)}
 .axis-card.fair{border-left:3px solid var(--medium)}
 .axis-card.poor{border-left:3px solid var(--high)}
 .axis-card.zeroed{border-left:3px solid var(--critical)}
+.axis-card.unmeasured{border-left:3px solid var(--line);opacity:.75}
+.axis-score.unmeasured,.axis-score-inline.unmeasured{font-size:1rem;color:var(--muted)}
 .axis-name{font-size:13px;color:var(--dim)}
 .axis-score{font-size:30px;font-weight:600;line-height:1.1}
 .axis-score small,.axis-score-inline small{font-size:14px;color:var(--dim);font-weight:400}

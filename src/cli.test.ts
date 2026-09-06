@@ -39,6 +39,15 @@ describe('webdiag executable', () => {
   });
 });
 
+/**
+ * Performance is excluded on purpose. Since phase 1 that axis drives a real
+ * headless Chrome against a real network, so its numbers legitimately differ
+ * between two runs — asserting byte equality on it would be asserting that the
+ * internet is deterministic. The determinism contract is about the normalizer,
+ * and the fixture axes exercise it end to end through a real process.
+ */
+const DETERMINISTIC_AXES = 'SEO,A11Y,DEPS,SEC,AGENT';
+
 describe('webdiag scan (end to end)', () => {
   const outDir = `${process.env.TMPDIR ?? '/tmp'}/webdiag-cli-e2e-${process.pid}`;
 
@@ -52,6 +61,8 @@ describe('webdiag scan (end to end)', () => {
       'https://example.com',
       '--mode',
       'quick',
+      '--axes',
+      DETERMINISTIC_AXES,
       '--out',
       outDir,
     ]);
@@ -62,7 +73,7 @@ describe('webdiag scan (end to end)', () => {
     for (const artifact of ['findings.json', 'summary.json', 'meta.json', 'report.html']) {
       expect(await Bun.file(`${outDir}/${artifact}`).exists()).toBe(true);
     }
-    expect(await Bun.file(`${outDir}/raw/PERF.json`).exists()).toBe(true);
+    expect(await Bun.file(`${outDir}/raw/SEO.json`).exists()).toBe(true);
 
     const findings = await Bun.file(`${outDir}/findings.json`).text();
 
@@ -71,6 +82,8 @@ describe('webdiag scan (end to end)', () => {
       'https://example.com',
       '--mode',
       'quick',
+      '--axes',
+      DETERMINISTIC_AXES,
       '--out',
       outDir,
     ]);

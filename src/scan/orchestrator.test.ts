@@ -34,11 +34,16 @@ const REQUEST: ScanRequest = {
 
 const FIXED_CLOCK = () => new Date('2026-09-06T12:00:00.000Z');
 
-async function scan(overrides: Partial<ScanRequest> = {}, probes?: readonly Probe[]) {
+/**
+ * Always injects the stub set. These tests are about the orchestrator, not about
+ * which probes ship by default — and the default set now drives a real browser,
+ * which has no business inside `bun test`.
+ */
+async function scan(overrides: Partial<ScanRequest> = {}, probes: readonly Probe[] = stubProbes()) {
   const writer = memoryWriter();
   const result = await runScan(
     { ...REQUEST, ...overrides },
-    { writer, clock: FIXED_CLOCK, ...(probes === undefined ? {} : { probes }) },
+    { writer, clock: FIXED_CLOCK, probes },
   );
 
   return { writer, result };

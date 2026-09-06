@@ -20,9 +20,23 @@ import { axisSchema, confidenceSchema, modeSchema, severitySchema } from '../cat
 /** Bumped only when the shape changes in a way an adapter would have to notice. */
 export const RAW_SCHEMA_VERSION = 'webdiag.raw/1';
 
+export const toolComponentSchema = z.object({
+  name: z.string().min(1),
+  version: z.string().min(1),
+});
+
+export type ToolComponent = z.infer<typeof toolComponentSchema>;
+
 export const toolVersionSchema = z.object({
   name: z.string().min(1),
   version: z.string().min(1),
+  /**
+   * Sub-tools whose version moves the numbers as much as the tool's own does.
+   * Lighthouse without its Chrome build is not a reproducible measurement, and
+   * spec §6 requires `meta.json` to record "cada herramienta, incluida la de
+   * Chrome" — this is where that second version travels.
+   */
+  components: z.array(toolComponentSchema).readonly().optional(),
 });
 
 export type ToolVersion = z.infer<typeof toolVersionSchema>;
