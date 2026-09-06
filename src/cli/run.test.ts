@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, test } from 'bun:test';
-import type { ArtifactWriter } from '../scan/index.ts';
+import { type ArtifactWriter, stubProbes } from '../scan/index.ts';
 import { COMMANDS } from './commands.ts';
 import { EXIT } from './exit-codes.ts';
 import { type CliOutput, runCli } from './run.ts';
@@ -16,7 +16,13 @@ function makeOutput(): CliOutput & { out: string[]; err: string[] } {
   };
 }
 
-/** Keeps `runCli` off the real filesystem while still exercising the dispatch. */
+/**
+ * Keeps `runCli` off the real filesystem while still exercising the dispatch.
+ * Its counterpart is `probes: stubProbes()` below, which keeps it off the
+ * network: the default registry launches Chrome and shells out to external
+ * binaries, and these tests are about argument dispatch, not about what a live
+ * host answered.
+ */
 function memoryWriter(): ArtifactWriter & { files: Map<string, string> } {
   const files = new Map<string, string>();
 
@@ -79,7 +85,10 @@ describe('runCli', () => {
 
   test('dispatches scan and reports every artifact it wrote', async () => {
     const writer = memoryWriter();
-    const code = await runCli(['scan', 'https://example.com', '--out', '/tmp/x'], io, { writer });
+    const code = await runCli(['scan', 'https://example.com', '--out', '/tmp/x'], io, {
+      writer,
+      probes: stubProbes(),
+    });
 
     expect(code).toBe(EXIT.OK);
     expect([...writer.files.keys()]).toContain('/tmp/x/findings.json');
@@ -87,15 +96,18 @@ describe('runCli', () => {
   });
 
   test('rejects a scan invocation without a URL', async () => {
-    const code = await runCli(['scan'], io, { writer: memoryWriter() });
+    const code = await runCli(['scan'], io, { writer: memoryWriter(), probes: stubProbes() });
 
     expect(code).toBe(EXIT.USAGE);
     expect(io.err.join('\n')).toContain('scan requires a URL');
   });
 
   test('reports a per-axis score line and never a composite one', async () => {
+    // The fixture probes keep this test about the CLI's output format. The real
+    // SEO probe would reach the network and score whatever it found there.
     await runCli(['scan', 'https://example.com', '--out', '/tmp/x'], io, {
       writer: memoryWriter(),
+      probes: stubProbes(),
     });
     const stdout = io.out.join('\n');
 

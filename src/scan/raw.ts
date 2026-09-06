@@ -20,9 +20,23 @@ import { axisSchema, confidenceSchema, modeSchema, severitySchema } from '../cat
 /** Bumped only when the shape changes in a way an adapter would have to notice. */
 export const RAW_SCHEMA_VERSION = 'webdiag.raw/1';
 
+export const toolComponentSchema = z.object({
+  name: z.string().min(1),
+  version: z.string().min(1),
+});
+
+export type ToolComponent = z.infer<typeof toolComponentSchema>;
+
 export const toolVersionSchema = z.object({
   name: z.string().min(1),
   version: z.string().min(1),
+  /**
+   * Sub-tools whose version moves the numbers as much as the tool's own does.
+   * Lighthouse without its Chrome build is not a reproducible measurement, and
+   * spec §6 requires `meta.json` to record "cada herramienta, incluida la de
+   * Chrome" — this is where that second version travels.
+   */
+  components: z.array(toolComponentSchema).readonly().optional(),
 });
 
 export type ToolVersion = z.infer<typeof toolVersionSchema>;
@@ -54,6 +68,12 @@ export const rawDocumentSchema = z.object({
     mode: modeSchema,
   }),
   observations: z.array(rawObservationSchema).readonly(),
+  /**
+   * What the probe could *not* see, in plain language. A probe that skipped a
+   * check because a tool was missing or robots.txt refused must say so: a
+   * shorter finding list would otherwise read as a cleaner site.
+   */
+  notes: z.array(z.string()).readonly().optional(),
 });
 
 export type RawDocument = z.infer<typeof rawDocumentSchema>;

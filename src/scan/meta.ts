@@ -14,7 +14,7 @@ import type { Axis, Mode } from '../catalog/index.ts';
 import { CATALOG_VERSION } from '../catalog/index.ts';
 import { VERSION } from '../version.ts';
 import type { ProbeOutcome } from './probe.ts';
-import { RAW_SCHEMA_VERSION } from './raw.ts';
+import { RAW_SCHEMA_VERSION, type ToolComponent } from './raw.ts';
 import { SUMMARY_SCHEMA_VERSION } from './summary.ts';
 
 export const META_SCHEMA_VERSION = 'webdiag.meta/1';
@@ -23,6 +23,8 @@ export type ToolRecord = {
   readonly axis: Axis;
   readonly name: string;
   readonly version: string;
+  /** Versions the tool depends on, such as the Chrome build behind Lighthouse. */
+  readonly components: readonly ToolComponent[] | undefined;
   readonly status: ProbeOutcome['status'];
   readonly error: string | undefined;
 };
@@ -95,6 +97,7 @@ export function buildMeta(input: MetaInput): Meta {
       axis: outcome.axis,
       name: outcome.tool.name,
       version: outcome.tool.version,
+      components: outcome.tool.components,
       status: outcome.status,
       error: outcome.status === 'failed' ? outcome.error : undefined,
     })),

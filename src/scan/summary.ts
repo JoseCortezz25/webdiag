@@ -24,6 +24,7 @@ import {
 } from '../catalog/index.ts';
 import type { RejectedObservation } from './normalize.ts';
 import type { ProbeOutcome } from './probe.ts';
+import type { ToolComponent } from './raw.ts';
 
 export const SUMMARY_SCHEMA_VERSION = 'webdiag.summary/1';
 
@@ -33,6 +34,7 @@ export const DISCLAIMERS: readonly string[] = [
   'Un diagnostico automatizado no sustituye una auditoria formal: cerca del 43% de los criterios WCAG exige revision humana.',
   'Este informe no emite juicios legales de cumplimiento (EAA, ADA) ni incluye escaneo activo de seguridad.',
   'Los hallazgos con confianza baja se listan aparte y no afectan ningun puntaje.',
+  'El impacto del eje Agent-readiness (AGENT) no esta probado: se reporta con su propio nivel, no se combina con ningun otro eje y no debe leerse como un factor de posicionamiento demostrado.',
 ];
 
 export type FindingSummary = {
@@ -55,8 +57,13 @@ export type FindingSummary = {
 export type ProbeSummary = {
   readonly axis: Axis;
   readonly tool: string;
+  /** Kept structured rather than folded into `tool`: the report shows the
+   *  Chrome build, and a consumer comparing two runs has to diff it. */
+  readonly components: readonly ToolComponent[] | undefined;
   readonly status: ProbeOutcome['status'];
   readonly error: string | undefined;
+  /** Limits the probe declared on its own coverage. Never dropped. */
+  readonly notes: readonly string[];
 };
 
 export type AxisSummary = {
@@ -145,8 +152,10 @@ function probeSummary(outcome: ProbeOutcome): ProbeSummary {
   return {
     axis: outcome.axis,
     tool: `${outcome.tool.name}@${outcome.tool.version}`,
+    components: outcome.tool.components,
     status: outcome.status,
     error: outcome.status === 'failed' ? outcome.error : undefined,
+    notes: outcome.status === 'ok' ? (outcome.raw.notes ?? []) : [],
   };
 }
 
@@ -197,7 +206,14 @@ export function buildSummary(input: SummaryInput): Summary {
     const outcome = outcomeByAxis.get(axis);
     const probe: ProbeSummary =
       outcome === undefined
-        ? { axis, tool: 'none', status: 'failed', error: 'No probe registered for this axis.' }
+        ? {
+            axis,
+            tool: 'none',
+            components: undefined,
+            status: 'failed',
+            error: 'No probe registered for this axis.',
+            notes: [],
+          }
         : probeSummary(outcome);
 
     return axisSummary(scores[axis], probe);

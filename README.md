@@ -9,17 +9,44 @@ their output against a stable findings catalog, and emits machine-readable JSON 
 self-contained HTML report. It runs without AI and is usable in CI. Interpreting the
 findings for a specific client is the job of a separate Claude skill, not of this CLI.
 
-> **Status: phase 0 — skeleton with fixture data.** The whole pipeline runs end to end
-> (orchestrator → probe → normalizer → report), but the only probe that exists is a stub
-> that returns fixed data. `webdiag scan` writes every artifact of the real contract and
-> the numbers in them are **invented**. Real probes land in phase 1; until then the report
-> is for validating the flow and the design, not for sending to a client.
+> **Status: phase 1 — three real probes, three fixtures.** The whole pipeline runs end to
+> end (orchestrator → probe → normalizer → report). **PERF, A11Y and SEC are measured for
+> real**; SEO, DEPS and AGENT are still stubs whose numbers are **invented**. Each axis
+> names its own source: a fixture axis reports the tool `webdiag-stub@0.0.0-fixture`, so a
+> real number and an invented one are never presented as the same kind of thing.
 
 ## Requirements
 
 - [Bun](https://bun.sh) `>= 1.2` (developed against 1.3.11)
+- Chrome, downloaded automatically by `bun install` (Puppeteer's own build). The
+  accessibility and performance probes need a real rendering engine.
+- `curl` — required by the SEC probe to read security headers off the wire. Present by
+  default on macOS and most Linux distributions.
 
 No Node.js or npm required.
+
+Chrome's sandbox is left on, because the probes render untrusted third-party pages.
+Containers that cannot create the user namespace it needs can opt out explicitly with
+`WEBDIAG_CHROME_NO_SANDBOX=1`.
+
+### Optional: testssl.sh
+
+The SEC probe's three TLS findings (`SEC-TLS-WEAK`, `SEC-TLS-EXPIRING`, `SEC-TLS-EXPIRED`)
+come from [testssl.sh](https://testssl.sh). It is optional: without it the probe still
+checks headers and records in the report that TLS was not evaluated.
+
+```bash
+bun run install:testssl    # pinned copy into git-ignored vendor/
+```
+
+Alternatively put `testssl.sh` on `PATH`, or point `WEBDIAG_TESTSSL` at it. On macOS, GNU
+`timeout` is usually absent; the probe detects that and drops testssl.sh's per-connection
+timeout flags rather than failing, because passing them without `timeout(1)` makes
+testssl.sh abort before running a single check.
+
+The SEC probe identifies itself as `FlareDiagnostics/1.0 (+<contact>)` on every request,
+honours `robots.txt` (RFC 9309), and throttles to one request per second per host. Set
+`WEBDIAG_CONTACT` to change the contact URL an operator sees in their access log.
 
 ## Installation
 
@@ -117,11 +144,48 @@ never deducted.
 | `bun run format:check` | Formatting check only, no writes |
 | `bun test` | Bun's test runner |
 
+## The agent layer
+
+`webdiag` deliberately stops at measurement. Deciding *how* to invoke it for a given
+client, and deciding which of forty findings is the one costing money, is judgment that
+lives in a Claude skill: [`.agents/skills/webdiag-report`](.agents/skills/webdiag-report)
+(spec §4, layer 3).
+
+| | `webdiag` (CLI) | `webdiag-report` (skill) |
+|---|---|---|
+| Responsibility | measure | decide and explain |
+| Runs without AI | yes | no |
+| Usable in CI | yes | no |
+| Reads | the live site, the repo | `summary.json`, and nothing else |
+| Produces | `raw/`, `findings.json`, `summary.json`, `report.html`, `meta.json` | `narrative.json` → `client-report.html` |
+
+The skill installs this CLI as a dependency, calls `webdiag scan` with a mode, axis set
+and page count chosen from the conversation, writes a prioritised narrative, and renders
+the client report with `build_report.py`:
+
+```bash
+python3 .agents/skills/webdiag-report/scripts/build_report.py \
+  --summary   ./out/summary.json \
+  --narrative ./out/narrative.json \
+  --out       ./out/client-report.html
+```
+
+The script refuses (exit `3`) if the narrative cites a finding the summary does not
+contain, or if a blocking critical from the summary's cover page is left unranked.
+`src/scan/skill-contract.test.ts` guards the constants the Python restates — schema
+version, axes, severities — against drift from the TypeScript.
+
 ## Repository structure
 
 ```
 .
 ├── .github/workflows/ci.yml   CI: lint · typecheck · test · build on every push and PR
+├── .agents/skills/            Agent skills; .claude/skills/ symlinks into this tree
+│   └── webdiag-report/        Layer 3: the judgment and drafting skill
+│       ├── SKILL.md           The procedure: context → invocation → narrative → report
+│       ├── scripts/           `build_report.py`, narrative + summary → client report
+│       ├── references/        The narrative contract and the summary fields it reads
+│       └── examples/          A real summary plus a complete narrative over it
 ├── src/
 │   ├── cli.ts                 Executable entrypoint (shebang, argv, exit code)
 │   ├── cli.test.ts            Integration test: spawns the real CLI process
@@ -141,13 +205,21 @@ never deducted.
 │   └── scan/                  The pipeline
 │       ├── args.ts            Parses `scan` flags into a request
 │       ├── probe.ts           Probe contract; a probe failure never ends the run
+│       ├── probes.ts          Which probe runs for which axis: real, or still fixture
 │       ├── stub-probe.ts      Phase 0 probe: fixed data, no network, no external tool
+│       ├── a11y/              The accessibility probe (axe-core in headless Chrome)
+│       │   ├── axe.ts             The axe payload, validated at the browser boundary
+│       │   ├── mapping.ts         axe rule IDs → catalog IDs, as data
+│       │   ├── adapter.ts         axe report → raw observations; pure, no browser
+│       │   ├── browser-runner.ts  The only part that launches Chrome
+│       │   └── probe.ts           Wiring, and the tool identity written to meta.json
 │       ├── raw.ts             `webdiag.raw/1`, the intermediate format probes emit
 │       ├── normalize.ts       Raw → findings: catalog admission, merge, stable order
 │       ├── summary.ts         Builds `summary.json`, the agent layer's only input
 │       ├── meta.ts            Builds `meta.json`: catalog and tool versions
 │       ├── report.ts          Renders the self-contained `report.html`
-│       └── orchestrator.ts    Wires it together and writes the artifacts
+│       ├── orchestrator.ts    Wires it together and writes the artifacts
+│       └── skill-contract.test.ts  Guards the skill's copies of schema, axes, severities
 ├── docs/
 │   ├── inbox/                 Source material: spec and findings catalog
 │   └── agents/                Conventions for agents working in this repo
@@ -166,6 +238,15 @@ Design rules the code enforces rather than documents:
   confined to `meta.json`, so two runs over the same data produce identical bytes.
 - **No probe failure ends a run.** A probe that throws is recorded as `failed` for its
   axis; the other five axes still produce a report.
+- **A clean automated pass is never reported as a clean site.** Every accessibility run
+  emits `A11Y-MANUAL-REVIEW-PENDING`, because roughly 43% of WCAG criteria need human
+  judgement and no tool covers them. Its evidence lists what axe could not settle.
+- **The probe never decides severity.** Observations carry no severity, so the catalog
+  stays the only authority: `A11Y-FORM-LABEL-MISSING` is `high`, and
+  `A11Y-BUTTON-NAME-MISSING` is a blocking `critical` that zeroes the axis.
+- **The agent layer cannot reach the raw dumps.** `summary.json` carries every number,
+  path, remediation and piece of evidence a client report needs, and `build_report.py`
+  refuses a `--summary` that points inside `raw/`.
 
 ## Continuous integration
 

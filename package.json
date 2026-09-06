@@ -15,8 +15,12 @@
   "engines": {
     "bun": ">=1.2.0"
   },
+  "trustedDependencies": [
+    "puppeteer"
+  ],
   "scripts": {
-    "build": "bun build ./src/cli.ts --outdir dist --target bun --minify && chmod +x dist/cli.js",
+    "build": "bun build ./src/cli.ts --outdir dist --target bun --minify --external lighthouse --external puppeteer --external @puppeteer/browsers --external chrome-launcher --external retire && chmod +x dist/cli.js",
+    "install:testssl": "bash scripts/install-testssl.sh",
     "dev": "bun run ./src/cli.ts",
     "typecheck": "tsc --noEmit",
     "lint": "biome check .",
@@ -31,6 +35,12 @@
     "typescript": "5.9.3"
   },
   "dependencies": {
+    "@puppeteer/browsers": "3.2.2",
+    "axe-core": "4.13.0",
+    "chrome-launcher": "1.2.1",
+    "lighthouse": "13.4.1",
+    "puppeteer": "25.10.0",
+    "retire": "^5.7.0",
     "zod": "4.5.4"
   }
 }

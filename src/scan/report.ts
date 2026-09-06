@@ -30,6 +30,20 @@ const AXIS_LABEL: Readonly<Record<string, string>> = {
   AGENT: 'Agent-readiness',
 };
 
+/**
+ * Axes whose findings must be read with a stated caveat.
+ *
+ * AGENT is here because spec §5.1 requires it: "se reporta con su propio nivel,
+ * declarando explicitamente que su impacto no esta probado". The caveat is
+ * rendered on the axis card *and* in the axis section, so a reader who only
+ * skims the grid still gets it, and it cannot be lost by scrolling past the
+ * disclaimer block at the top.
+ */
+const AXIS_CAVEAT: Readonly<Record<string, string>> = {
+  AGENT:
+    'Impacto no probado. Este eje no se combina con ningun otro y su puntaje no debe leerse como un factor de posicionamiento demostrado: llms.txt, por ejemplo, esta clasificado por Google como mito.',
+};
+
 const SEVERITY_LABEL: Readonly<Record<Severity, string>> = {
   critical: 'Critico',
   high: 'Alto',
@@ -115,25 +129,51 @@ function findingList(findings: readonly FindingSummary[], empty: string): string
   return findings.map(findingCard).join('');
 }
 
+/**
+ * An axis whose probe never ran has no findings, and an axis with no findings
+ * scores 100. Printing that number would turn a browser that failed to start
+ * into a perfect result — the exact "reporte como certificado" failure spec §9
+ * warns about. So a failed axis shows no score at all.
+ */
+function unmeasured(axis: AxisSummary): boolean {
+  return axis.probe.status === 'failed';
+}
+
+function scoreMarkup(axis: AxisSummary): string {
+  return unmeasured(axis)
+    ? '<span class="axis-score unmeasured">sin medir</span>'
+    : `<span class="axis-score">${axis.score}<small>/${axis.maxScore}</small></span>`;
+}
+
 function axisCard(axis: AxisSummary): string {
-  const state = axis.zeroed
-    ? 'zeroed'
-    : axis.score >= 90
-      ? 'good'
-      : axis.score >= 70
-        ? 'fair'
-        : 'poor';
-  const probe =
-    axis.probe.status === 'failed'
-      ? `<p class="probe-failed">Probe no disponible: ${escapeHtml(axis.probe.error ?? 'error desconocido')}</p>`
-      : '';
+  const state = unmeasured(axis)
+    ? 'unmeasured'
+    : axis.zeroed
+      ? 'zeroed'
+      : axis.score >= 90
+        ? 'good'
+        : axis.score >= 70
+          ? 'fair'
+          : 'poor';
+  const probe = unmeasured(axis)
+    ? `<p class="probe-failed">Probe no disponible: ${escapeHtml(axis.probe.error ?? 'error desconocido')}</p>`
+    : '';
+
+  const caveat =
+    AXIS_CAVEAT[axis.axis] === undefined
+      ? ''
+      : '<span class="axis-caveat">Impacto no probado</span>';
 
   return [
     `<a class="axis-card ${state}" href="#axis-${escapeHtml(axis.axis)}">`,
     `<span class="axis-name">${escapeHtml(axisLabel(axis.axis))}</span>`,
-    `<span class="axis-score">${axis.score}<small>/${axis.maxScore}</small></span>`,
+    scoreMarkup(axis),
     axis.zeroed ? '<span class="axis-note">Anulado por hallazgo bloqueante</span>' : '',
     `<span class="axis-meta">${axis.counts.scored} hallazgos puntuados</span>`,
+    axis.probe.notes.length === 0
+      ? ''
+      : `<span class="axis-note limited">Cobertura parcial (${axis.probe.notes.length})</span>`,
+    caveat,
     probe,
     '</a>',
   ].join('');
@@ -167,6 +207,38 @@ function deductionTable(axis: AxisSummary): string {
   ].join('');
 }
 
+/**
+ * The tool line. It names the sub-tool versions too, because a Performance score
+ * measured by a different Chrome build is not comparable to last quarter's and
+ * the reader has no other way to notice (spec §9).
+ */
+function toolLine(axis: AxisSummary): string {
+  const components = (axis.probe.components ?? [])
+    .map((component) => `${component.name}@${component.version}`)
+    .join(', ');
+
+  const suffix = components === '' ? '' : ` (<code>${escapeHtml(components)}</code>)`;
+
+  return `<p class="tool">Herramienta: <code>${escapeHtml(axis.probe.tool)}</code>${suffix} · estado <code>${escapeHtml(axis.probe.status)}</code></p>`;
+}
+
+/**
+ * What the probe admits it did not check. Rendered next to the score rather than
+ * in a footnote: a reader who does not see it will read the score as coverage.
+ */
+function coverageSection(axis: AxisSummary): string {
+  if (axis.probe.notes.length === 0) {
+    return '';
+  }
+
+  return [
+    '<div class="coverage">',
+    '<h3>Alcance de esta medicion</h3>',
+    `<ul>${axis.probe.notes.map((note) => `<li>${escapeHtml(note)}</li>`).join('')}</ul>`,
+    '</div>',
+  ].join('');
+}
+
 function axisSection(axis: AxisSummary): string {
   const mentions =
     axis.mentions.length === 0
@@ -186,13 +258,20 @@ function axisSection(axis: AxisSummary): string {
           findingList(axis.lowConfidence, ''),
         ].join('');
 
+  const caveatText = AXIS_CAVEAT[axis.axis];
+  const caveat = caveatText === undefined ? '' : `<p class="caveat">${escapeHtml(caveatText)}</p>`;
+
   return [
     `<section class="axis" id="axis-${escapeHtml(axis.axis)}">`,
     '<header class="axis-header">',
     `<h2>${escapeHtml(axisLabel(axis.axis))} <span class="axis-code">${escapeHtml(axis.axis)}</span></h2>`,
-    `<p class="axis-score-inline">${axis.score}<small>/${axis.maxScore}</small></p>`,
+    unmeasured(axis)
+      ? '<p class="axis-score-inline unmeasured">sin medir</p>'
+      : `<p class="axis-score-inline">${axis.score}<small>/${axis.maxScore}</small></p>`,
     '</header>',
-    `<p class="tool">Herramienta: <code>${escapeHtml(axis.probe.tool)}</code> · estado <code>${escapeHtml(axis.probe.status)}</code></p>`,
+    caveat,
+    toolLine(axis),
+    coverageSection(axis),
     deductionTable(axis),
     findingList(axis.findings, 'Sin hallazgos puntuados en este eje.'),
     mentions,
@@ -262,12 +341,21 @@ a{color:var(--accent)}
 .axis-card.fair{border-left:3px solid var(--medium)}
 .axis-card.poor{border-left:3px solid var(--high)}
 .axis-card.zeroed{border-left:3px solid var(--critical)}
+.axis-card.unmeasured{border-left:3px solid var(--line);opacity:.75}
+.axis-score.unmeasured,.axis-score-inline.unmeasured{font-size:1rem;color:var(--muted)}
 .axis-name{font-size:13px;color:var(--dim)}
 .axis-score{font-size:30px;font-weight:600;line-height:1.1}
 .axis-score small,.axis-score-inline small{font-size:14px;color:var(--dim);font-weight:400}
 .axis-note{font-size:12px;color:var(--critical)}
 .axis-meta{font-size:12px;color:var(--dim)}
 .probe-failed{font-size:12px;color:var(--medium);margin:4px 0 0}
+.axis-note.limited{color:var(--medium)}
+.axis-caveat{font-size:11px;color:var(--medium);border:1px solid var(--medium);border-radius:999px;padding:1px 7px;align-self:flex-start;margin-top:4px}
+.caveat{background:var(--panel);border:1px solid var(--medium);border-left:3px solid var(--medium);border-radius:8px;padding:10px 14px;margin:0 0 12px;color:var(--dim);font-size:13px}
+.coverage{border:1px solid var(--line);border-left:3px solid var(--medium);border-radius:8px;background:var(--panel);padding:10px 16px;margin:0 0 14px}
+.coverage h3{margin:0 0 4px}
+.coverage ul{margin:0;padding-left:18px}
+.coverage li{color:var(--dim);font-size:13px}
 .no-composite{color:var(--dim);font-size:13px;margin:0 0 32px;border-top:1px dashed var(--line);padding-top:10px}
 .axis{border-top:1px solid var(--line);padding-top:22px;margin-top:34px}
 .axis-header{display:flex;align-items:baseline;justify-content:space-between;gap:12px}

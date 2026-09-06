@@ -1,0 +1,77 @@
+{
+  "schema": "webdiag.narrative/1",
+  "preparedFor": "Tienda Ejemplo S.A.",
+  "context": {
+    "business": "Ecommerce de moda. El 68% de las sesiones llegan desde movil y el 40% de los ingresos entra por trafico organico.",
+    "objective": "Entender por que cayeron las visitas organicas despues del rediseno de agosto.",
+    "constraints": "Un frontend de dos personas y una ventana de despliegue semanal."
+  },
+  "invocation": {
+    "command": "webdiag scan https://tienda-ejemplo.com --mode quick --out ./diag-2026-09-06",
+    "rationale": "Modo quick sobre la home: la pregunta era una caida de trafico organico y el primer sospechoso siempre es la indexabilidad de la portada. Un barrido deep sobre plantillas de categoria y producto queda para la segunda vuelta, ya con el bloqueo resuelto."
+  },
+  "verdict": {
+    "state": "critical",
+    "headline": "La home esta pidiendo a Google que no la indexe: eso explica la caida, y el resto puede esperar."
+  },
+  "executiveSummary": "La portada de tienda-ejemplo.com sale a produccion con una directiva noindex activa. En terminos practicos le esta diciendo a los buscadores que la excluyan del indice, y coincide en fecha con el rediseno de agosto. Mientras eso siga asi, cualquier otra mejora de SEO no tiene donde sumar.\n\nPor debajo de ese bloqueo hay dos problemas que si afectan a quien ya llega al sitio: la pagina tarda 4.1 segundos en mostrar su contenido principal en movil, y hay imagenes de producto sin texto alternativo junto a contraste insuficiente en varios elementos. Para una tienda con dos tercios de trafico movil, lo primero es dinero perdido en el embudo; lo segundo es exposicion legal y clientes que no pueden comprar.\n\nSeguridad y dependencias estan en buen estado general, con dos ajustes de cabeceras que son trabajo de una tarde. El eje de agent-readiness no requiere accion: su impacto real no esta demostrado y no justifica competir por la agenda del equipo.",
+  "priorities": [
+    {
+      "rank": 1,
+      "title": "Quitar el noindex de produccion y pedir reindexacion",
+      "findingIds": ["SEO-NOINDEX-UNINTENDED"],
+      "businessImpact": "El 40% de los ingresos depende de trafico organico y la home esta fuera del indice. Cada dia que pasa se pierden posiciones que despues cuesta semanas recuperar, y ninguna otra inversion en SEO rinde mientras el bloqueo siga activo.",
+      "recommendation": "Revisar la configuracion de entorno del build de produccion: el noindex viene tanto en la cabecera x-robots-tag como en la meta, lo que apunta a una variable de staging filtrada al despliegue. Corregir, verificar con el inspector de URLs de Search Console y solicitar reindexacion el mismo dia.",
+      "effort": "low",
+      "horizon": "now"
+    },
+    {
+      "rank": 2,
+      "title": "Acelerar la primera pantalla en movil",
+      "findingIds": ["PERF-LCP-POOR", "PERF-IMG-UNOPTIMIZED", "PERF-TBT-HIGH"],
+      "businessImpact": "Con 4.1 segundos hasta el contenido principal, una parte de las sesiones movil abandona antes de ver el primer producto. Es el tramo del embudo mas caro de perder porque ya se pago la visita.",
+      "recommendation": "Es un solo trabajo con tres frentes: servir el hero en formato moderno y dimensionado, diferir el JavaScript que no participa de la primera pantalla, y volver a medir. Una persona del equipo de frontend, un ciclo de despliegue.",
+      "effort": "medium",
+      "horizon": "now"
+    },
+    {
+      "rank": 3,
+      "title": "Cerrar las barreras de accesibilidad que bloquean la compra",
+      "findingIds": [
+        "A11Y-IMG-ALT-MISSING",
+        "A11Y-CONTRAST-INSUFFICIENT",
+        "A11Y-LANDMARKS-MISSING"
+      ],
+      "businessImpact": "Las imagenes de producto sin texto alternativo dejan a quien usa lector de pantalla sin saber que esta comprando, y el contraste insuficiente afecta a cualquiera con luz de dia sobre la pantalla. Es publico que hoy no puede comprar, ademas de exposicion regulatoria.",
+      "recommendation": "Empezar por el catalogo: el alt de producto puede salir del nombre en la base de datos, asi que es una correccion de plantilla y no de contenido. El contraste requiere una decision de diseno sobre la paleta secundaria antes de tocar codigo.",
+      "effort": "medium",
+      "horizon": "next"
+    },
+    {
+      "rank": 4,
+      "title": "Endurecer las cabeceras de seguridad",
+      "findingIds": ["SEC-CSP-MISSING", "SEC-HSTS-MISSING", "DEPS-SOURCEMAP-EXPOSED"],
+      "businessImpact": "Nada de esto esta siendo explotado hoy, pero son las tres preguntas que aparecen en cualquier revision de un cliente corporativo o de una pasarela de pago.",
+      "recommendation": "Configuracion de servidor, sin cambios de aplicacion: CSP en modo report-only primero para no romper widgets de terceros, HSTS, y excluir los sourcemaps del build de produccion.",
+      "effort": "low",
+      "horizon": "next"
+    }
+  ],
+  "axisNotes": {
+    "PERF": "Sin datos de campo: los numeros vienen de laboratorio y pueden ser optimistas frente a la red real de los clientes.",
+    "SEO": "El puntaje no es un promedio bajo: quedo en 0 por el noindex, que anula el eje completo.",
+    "DEPS": "Medicion black-box: se ve lo que el navegador descarga, no el lockfile. Correr con --repo para cerrar la brecha.",
+    "AGENT": "Sin accion recomendada. El impacto de estos indicadores no esta demostrado y no compite con el resto."
+  },
+  "notMeasured": [
+    "El escaneo cubrio solo la home en modo quick: categoria, producto y checkout siguen sin diagnostico.",
+    "Cerca del 43% de los criterios WCAG exige revision humana y no aparece en este informe.",
+    "Las dependencias se dedujeron de los bundles servidos, no del repositorio: hay versiones que no se pudieron determinar.",
+    "No se evaluo nada detras del login."
+  ],
+  "nextSteps": [
+    "Corregir el noindex hoy y confirmar la reindexacion en Search Console dentro de 72 horas.",
+    "Repetir el diagnostico en modo deep sobre home, categoria, producto y checkout una vez levantado el bloqueo.",
+    "Correr el diagnostico con --repo para cerrar la brecha de dependencias antes de la proxima revision de seguridad."
+  ]
+}

@@ -36,8 +36,15 @@ jobs:
       - name: Typecheck
         run: bun run typecheck
 
+      - name: Install Chrome for the accessibility probe
+        run: bunx puppeteer browsers install chrome
+
       - name: Test
         run: bun test
+        env:
+          # GitHub runners cannot always create the user namespace Chrome's
+          # sandbox needs. The probe keeps it on everywhere else.
+          WEBDIAG_CHROME_NO_SANDBOX: '1'
 
       - name: Build
         run: bun run build
