@@ -1,12 +1,15 @@
 {
-  "name": "webdiag",
-  "version": "0.1.0",
+  "name": "@ajosecortes/webdiag",
+  "version": "0.1.2",
   "description": "Automated technical diagnostics for websites: measure once, report deterministically.",
   "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
   "module": "src/cli.ts",
   "bin": {
-    "webdiag": "./dist/cli.js"
+    "webdiag": "dist/cli.js"
   },
   "files": [
     "dist",

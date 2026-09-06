@@ -9,6 +9,13 @@ describe('VERSION', () => {
     };
 
     expect(VERSION).toBe(pkg.version);
-    expect(PROGRAM_NAME).toBe(pkg.name);
+  });
+
+  test('matches the binary name published to npm', async () => {
+    const pkg = (await Bun.file(new URL('../package.json', import.meta.url)).json()) as {
+      bin?: Record<string, string>;
+    };
+
+    expect(Object.keys(pkg.bin ?? {})).toContain(PROGRAM_NAME);
   });
 });
