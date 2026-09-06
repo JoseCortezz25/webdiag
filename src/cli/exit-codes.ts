@@ -8,6 +8,8 @@ export const EXIT = {
   USAGE: 1,
   /** The command exists in the interface but has no implementation yet. */
   NOT_IMPLEMENTED: 2,
+  /** The invocation was valid but the run could not produce its artifacts. */
+  FAILED: 3,
 } as const;
 
 export type ExitCode = (typeof EXIT)[keyof typeof EXIT];

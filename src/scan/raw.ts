@@ -1,0 +1,63 @@
+/**
+ * The intermediate raw format, `webdiag.raw/1`.
+ *
+ * Spec §4 says layer 1 writes `raw/<axis>.json` in "the native format of each
+ * tool". In phase 0 there is exactly one tool — the stub — so its native format
+ * *is* this document, and the normalizer reads it directly.
+ *
+ * When the real probes land (phase 1) each one keeps writing whatever Lighthouse
+ * or axe-core actually produces, and ships an adapter that maps it onto this
+ * same shape. That is the seam: the normalizer never learns a second vocabulary,
+ * and this schema is the only thing it has to trust.
+ *
+ * An observation is deliberately *not* a `Finding`: it carries no
+ * `catalog_version`, no resolved severity and no `source`. Those are stamped by
+ * the normalizer, which is the only layer allowed to speak for the catalogue.
+ */
+import { z } from 'zod';
+import { axisSchema, confidenceSchema, modeSchema, severitySchema } from '../catalog/index.ts';
+
+/** Bumped only when the shape changes in a way an adapter would have to notice. */
+export const RAW_SCHEMA_VERSION = 'webdiag.raw/1';
+
+export const toolVersionSchema = z.object({
+  name: z.string().min(1),
+  version: z.string().min(1),
+});
+
+export type ToolVersion = z.infer<typeof toolVersionSchema>;
+
+export const rawObservationSchema = z.object({
+  /** Claimed catalogue ID. Unvalidated here on purpose: the normalizer rejects
+   *  anything unknown, so a drifting probe produces a rejection, not a crash. */
+  id: z.string().min(1),
+  confidence: confidenceSchema,
+  /** How many places the probe saw it. Never split one kind into N observations. */
+  count: z.number().int().min(1),
+  affected: z.array(z.string()).readonly(),
+  evidence: z.record(z.string(), z.unknown()),
+  remediation: z.string().min(1),
+  /** Only when the run justifies deviating from the catalogue base severity. */
+  severity: severitySchema.optional(),
+  doc_ref: z.url().optional(),
+  title: z.string().min(1).optional(),
+});
+
+export type RawObservation = z.infer<typeof rawObservationSchema>;
+
+export const rawDocumentSchema = z.object({
+  schema: z.literal(RAW_SCHEMA_VERSION),
+  axis: axisSchema,
+  tool: toolVersionSchema,
+  target: z.object({
+    url: z.string().min(1),
+    mode: modeSchema,
+  }),
+  observations: z.array(rawObservationSchema).readonly(),
+});
+
+export type RawDocument = z.infer<typeof rawDocumentSchema>;
+
+export function parseRawDocument(input: unknown): RawDocument {
+  return rawDocumentSchema.parse(input);
+}

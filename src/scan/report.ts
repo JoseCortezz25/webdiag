@@ -1,0 +1,350 @@
+/**
+ * `report.html` — the client-facing artifact.
+ *
+ * Self-contained by design (spec §2): one file, inline CSS, no fonts, no CDN,
+ * no script. It has to survive being emailed, and a report that phones home to
+ * render is a report that will one day render blank.
+ *
+ * The layout enforces the scoring decision rather than merely respecting it:
+ * there is no slot anywhere for a single number. Six independent axis cards,
+ * each with its own score and its own arithmetic, and an explicit line saying a
+ * composite does not exist — because the first thing a reader does with six
+ * numbers is average them.
+ *
+ * Copy is Spanish: the catalogue's published meanings and remediations are
+ * Spanish (they are the contract, see `entries.ts`), and an English shell around
+ * Spanish content would read as a bug to the client it is written for.
+ */
+import type { Severity } from '../catalog/index.ts';
+import { requireEntry } from '../catalog/index.ts';
+import { PROGRAM_NAME, VERSION } from '../version.ts';
+import type { Meta } from './meta.ts';
+import type { AxisSummary, FindingSummary, Summary } from './summary.ts';
+
+const AXIS_LABEL: Readonly<Record<string, string>> = {
+  PERF: 'Rendimiento',
+  A11Y: 'Accesibilidad',
+  SEO: 'SEO tecnico',
+  DEPS: 'Dependencias',
+  SEC: 'Seguridad',
+  AGENT: 'Agent-readiness',
+};
+
+const SEVERITY_LABEL: Readonly<Record<Severity, string>> = {
+  critical: 'Critico',
+  high: 'Alto',
+  medium: 'Medio',
+  low: 'Bajo',
+  info: 'Informativo',
+};
+
+const CONFIDENCE_LABEL: Readonly<Record<string, string>> = {
+  high: 'confianza alta',
+  medium: 'confianza media',
+  low: 'confianza baja',
+};
+
+/** Escapes text for both element content and double-quoted attributes. */
+export function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function axisLabel(axis: string): string {
+  return AXIS_LABEL[axis] ?? axis;
+}
+
+function meaningOf(id: string): string {
+  return requireEntry(id).detects;
+}
+
+function headlineOf(finding: FindingSummary): string {
+  return finding.title ?? meaningOf(finding.id);
+}
+
+function evidenceRow(key: string, value: unknown): string {
+  const rendered = typeof value === 'string' ? value : JSON.stringify(value);
+  return `<div class="kv"><span class="k">${escapeHtml(key)}</span><span class="v">${escapeHtml(rendered ?? 'null')}</span></div>`;
+}
+
+function findingCard(finding: FindingSummary): string {
+  const evidence = Object.entries(finding.evidence)
+    .map(([key, value]) => evidenceRow(key, value))
+    .join('');
+
+  const affected =
+    finding.affected.length === 0
+      ? ''
+      : `<p class="affected"><span class="k">Donde</span> ${finding.affected
+          .map((path) => `<code>${escapeHtml(path)}</code>`)
+          .join(' ')}</p>`;
+
+  const docRef =
+    finding.docRef === undefined
+      ? ''
+      : `<p class="doc"><a href="${escapeHtml(finding.docRef)}">Referencia</a></p>`;
+
+  const badges = [
+    `<span class="badge sev-${finding.severity}">${SEVERITY_LABEL[finding.severity]}</span>`,
+    `<span class="badge conf">${CONFIDENCE_LABEL[finding.confidence] ?? finding.confidence}</span>`,
+    finding.count > 1 ? `<span class="badge count">${finding.count} ocurrencias</span>` : '',
+    finding.blocking ? '<span class="badge blocking">Bloqueante</span>' : '',
+  ].join('');
+
+  return [
+    '<article class="finding">',
+    `<header><h4>${escapeHtml(headlineOf(finding))}</h4><div class="badges">${badges}</div></header>`,
+    `<p class="id"><code>${escapeHtml(finding.id)}</code> · ${escapeHtml(meaningOf(finding.id))}</p>`,
+    affected,
+    evidence === '' ? '' : `<div class="evidence">${evidence}</div>`,
+    `<p class="fix"><span class="k">Como se corrige</span> ${escapeHtml(finding.remediation)}</p>`,
+    docRef,
+    '</article>',
+  ].join('');
+}
+
+function findingList(findings: readonly FindingSummary[], empty: string): string {
+  if (findings.length === 0) {
+    return `<p class="empty">${escapeHtml(empty)}</p>`;
+  }
+
+  return findings.map(findingCard).join('');
+}
+
+function axisCard(axis: AxisSummary): string {
+  const state = axis.zeroed
+    ? 'zeroed'
+    : axis.score >= 90
+      ? 'good'
+      : axis.score >= 70
+        ? 'fair'
+        : 'poor';
+  const probe =
+    axis.probe.status === 'failed'
+      ? `<p class="probe-failed">Probe no disponible: ${escapeHtml(axis.probe.error ?? 'error desconocido')}</p>`
+      : '';
+
+  return [
+    `<a class="axis-card ${state}" href="#axis-${escapeHtml(axis.axis)}">`,
+    `<span class="axis-name">${escapeHtml(axisLabel(axis.axis))}</span>`,
+    `<span class="axis-score">${axis.score}<small>/${axis.maxScore}</small></span>`,
+    axis.zeroed ? '<span class="axis-note">Anulado por hallazgo bloqueante</span>' : '',
+    `<span class="axis-meta">${axis.counts.scored} hallazgos puntuados</span>`,
+    probe,
+    '</a>',
+  ].join('');
+}
+
+function deductionTable(axis: AxisSummary): string {
+  if (axis.zeroed) {
+    return `<p class="arithmetic">Puntaje fijado en 0 por: ${axis.zeroedBy
+      .map((id) => `<code>${escapeHtml(id)}</code>`)
+      .join(', ')}. No se promedia.</p>`;
+  }
+
+  if (axis.deductions.length === 0) {
+    return '<p class="arithmetic">Sin deducciones: el eje conserva los 100 puntos.</p>';
+  }
+
+  const rows = axis.deductions
+    .map(
+      (deduction) =>
+        `<tr><td><code>${escapeHtml(deduction.id)}</code></td><td>-${deduction.points}</td></tr>`,
+    )
+    .join('');
+
+  return [
+    '<table class="arithmetic-table">',
+    '<caption>Como se calculo este puntaje</caption>',
+    '<thead><tr><th>Hallazgo</th><th>Puntos</th></tr></thead>',
+    `<tbody>${rows}</tbody>`,
+    `<tfoot><tr><td>${axis.maxScore} - deducciones</td><td>${axis.score}</td></tr></tfoot>`,
+    '</table>',
+  ].join('');
+}
+
+function axisSection(axis: AxisSummary): string {
+  const mentions =
+    axis.mentions.length === 0
+      ? ''
+      : [
+          '<h3>Mencionado desde otro eje</h3>',
+          '<p class="hint">Estos hallazgos se puntuan en el eje que los posee. Aqui solo se listan por contexto.</p>',
+          findingList(axis.mentions, ''),
+        ].join('');
+
+  const low =
+    axis.lowConfidence.length === 0
+      ? ''
+      : [
+          '<h3>Confianza baja</h3>',
+          '<p class="hint">Se listan siempre, nunca se ocultan, y no afectan el puntaje.</p>',
+          findingList(axis.lowConfidence, ''),
+        ].join('');
+
+  return [
+    `<section class="axis" id="axis-${escapeHtml(axis.axis)}">`,
+    '<header class="axis-header">',
+    `<h2>${escapeHtml(axisLabel(axis.axis))} <span class="axis-code">${escapeHtml(axis.axis)}</span></h2>`,
+    `<p class="axis-score-inline">${axis.score}<small>/${axis.maxScore}</small></p>`,
+    '</header>',
+    `<p class="tool">Herramienta: <code>${escapeHtml(axis.probe.tool)}</code> · estado <code>${escapeHtml(axis.probe.status)}</code></p>`,
+    deductionTable(axis),
+    findingList(axis.findings, 'Sin hallazgos puntuados en este eje.'),
+    mentions,
+    low,
+    '</section>',
+  ].join('');
+}
+
+function coverSection(summary: Summary): string {
+  if (summary.coverPage.length === 0) {
+    return '<section class="cover ok"><h2>Sin hallazgos bloqueantes</h2><p>Ningun eje quedo anulado por un hallazgo critico marcado como bloqueante.</p></section>';
+  }
+
+  return [
+    '<section class="cover alert">',
+    `<h2>${summary.coverPage.length} hallazgo(s) bloqueante(s)</h2>`,
+    '<p>Un hallazgo bloqueante fija su eje en 0 y sube a portada. No se promedia con el resto.</p>',
+    summary.coverPage.map(findingCard).join(''),
+    '</section>',
+  ].join('');
+}
+
+function rejectedSection(summary: Summary): string {
+  if (summary.rejected.length === 0) {
+    return '';
+  }
+
+  const rows = summary.rejected
+    .map(
+      (rejection) =>
+        `<tr><td><code>${escapeHtml(rejection.id)}</code></td><td>${escapeHtml(rejection.axis)}</td><td>${escapeHtml(rejection.reason)}</td><td>${escapeHtml(rejection.detail)}</td></tr>`,
+    )
+    .join('');
+
+  return [
+    '<section class="rejected">',
+    '<h2>Observaciones descartadas</h2>',
+    '<p class="hint">Un probe reporto algo que el catalogo no reconoce. Se muestra para que la omision sea visible.</p>',
+    '<table><thead><tr><th>ID</th><th>Eje</th><th>Motivo</th><th>Detalle</th></tr></thead>',
+    `<tbody>${rows}</tbody></table>`,
+    '</section>',
+  ].join('');
+}
+
+const STYLES = `
+:root{--bg:#0d1117;--panel:#161b22;--line:#30363d;--fg:#e6edf3;--dim:#9198a1;--accent:#58a6ff;
+--critical:#f85149;--high:#ff7b72;--medium:#d29922;--low:#8b949e;--info:#58a6ff;--good:#3fb950}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.6 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+main{max-width:960px;margin:0 auto;padding:32px 20px 80px}
+h1{font-size:26px;margin:0 0 4px}
+h2{font-size:19px;margin:0 0 8px}
+h3{font-size:15px;margin:28px 0 4px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em}
+h4{font-size:15px;margin:0}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;background:#22272e;padding:1px 5px;border-radius:4px}
+a{color:var(--accent)}
+.target{color:var(--dim);margin:0 0 24px;font-size:13.5px}
+.disclaimers{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--medium);border-radius:8px;padding:14px 18px;margin:0 0 28px}
+.disclaimers ul{margin:0;padding-left:18px}
+.disclaimers li{color:var(--dim);font-size:13.5px}
+.cover{border:1px solid var(--line);border-radius:10px;padding:18px;margin:0 0 28px;background:var(--panel)}
+.cover.alert{border-color:var(--critical)}
+.cover.ok{border-color:var(--good)}
+.axis-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:0 0 12px}
+.axis-card{display:flex;flex-direction:column;gap:2px;padding:14px;border:1px solid var(--line);border-radius:10px;background:var(--panel);text-decoration:none;color:inherit}
+.axis-card.good{border-left:3px solid var(--good)}
+.axis-card.fair{border-left:3px solid var(--medium)}
+.axis-card.poor{border-left:3px solid var(--high)}
+.axis-card.zeroed{border-left:3px solid var(--critical)}
+.axis-name{font-size:13px;color:var(--dim)}
+.axis-score{font-size:30px;font-weight:600;line-height:1.1}
+.axis-score small,.axis-score-inline small{font-size:14px;color:var(--dim);font-weight:400}
+.axis-note{font-size:12px;color:var(--critical)}
+.axis-meta{font-size:12px;color:var(--dim)}
+.probe-failed{font-size:12px;color:var(--medium);margin:4px 0 0}
+.no-composite{color:var(--dim);font-size:13px;margin:0 0 32px;border-top:1px dashed var(--line);padding-top:10px}
+.axis{border-top:1px solid var(--line);padding-top:22px;margin-top:34px}
+.axis-header{display:flex;align-items:baseline;justify-content:space-between;gap:12px}
+.axis-code{color:var(--dim);font-size:13px;font-weight:400}
+.axis-score-inline{font-size:26px;font-weight:600;margin:0}
+.tool{color:var(--dim);font-size:12.5px;margin:0 0 12px}
+.arithmetic{color:var(--dim);font-size:13px}
+.arithmetic-table,.rejected table{width:100%;border-collapse:collapse;margin:0 0 16px;font-size:13px}
+.arithmetic-table caption,.rejected caption{text-align:left;color:var(--dim);font-size:12px;padding-bottom:6px}
+.arithmetic-table th,.arithmetic-table td,.rejected th,.rejected td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line)}
+.arithmetic-table tfoot td{font-weight:600;border-bottom:none}
+.finding{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:14px 16px;margin:0 0 10px}
+.finding header{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:8px}
+.badges{display:flex;gap:6px;flex-wrap:wrap}
+.badge{font-size:11px;padding:2px 7px;border-radius:999px;border:1px solid var(--line);color:var(--dim);white-space:nowrap}
+.badge.sev-critical{color:var(--critical);border-color:var(--critical)}
+.badge.sev-high{color:var(--high);border-color:var(--high)}
+.badge.sev-medium{color:var(--medium);border-color:var(--medium)}
+.badge.sev-low{color:var(--low)}
+.badge.sev-info{color:var(--info);border-color:var(--info)}
+.badge.blocking{color:var(--critical);border-color:var(--critical);font-weight:600}
+.finding .id{color:var(--dim);font-size:12.5px;margin:6px 0}
+.evidence{display:grid;grid-template-columns:auto 1fr;gap:2px 12px;margin:10px 0;font-size:12.5px}
+.kv{display:contents}
+.k{color:var(--dim);text-transform:uppercase;font-size:11px;letter-spacing:.05em}
+.v{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;word-break:break-word}
+.affected,.fix,.doc{font-size:13px;margin:6px 0 0}
+.hint,.empty{color:var(--dim);font-size:13px}
+footer{margin-top:48px;border-top:1px solid var(--line);padding-top:16px;color:var(--dim);font-size:12.5px}
+footer table{border-collapse:collapse;font-size:12.5px;margin-top:8px}
+footer td,footer th{text-align:left;padding:3px 14px 3px 0}
+`;
+
+/** Renders the whole report as one self-contained HTML document. */
+export function renderReport(summary: Summary, meta: Meta): string {
+  const toolRows = meta.tools
+    .map(
+      (tool) =>
+        `<tr><td>${escapeHtml(tool.axis)}</td><td><code>${escapeHtml(tool.name)}</code></td><td>${escapeHtml(tool.version)}</td><td>${escapeHtml(tool.status)}</td></tr>`,
+    )
+    .join('');
+
+  return `<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="generator" content="${escapeHtml(`${PROGRAM_NAME} ${VERSION}`)}">
+<title>Diagnostico tecnico — ${escapeHtml(summary.target.url)}</title>
+<style>${STYLES}</style>
+</head>
+<body>
+<main>
+<h1>Diagnostico tecnico</h1>
+<p class="target"><code>${escapeHtml(summary.target.url)}</code> · modo <code>${escapeHtml(summary.target.mode)}</code> · catalogo v${escapeHtml(summary.catalogVersion)} · ${escapeHtml(meta.run.finishedAt)}</p>
+
+<div class="disclaimers"><ul>${summary.disclaimers.map((line) => `<li>${escapeHtml(line)}</li>`).join('')}</ul></div>
+
+${coverSection(summary)}
+
+<h2>Ejes evaluados</h2>
+<div class="axis-grid">${summary.byAxis.map(axisCard).join('')}</div>
+<p class="no-composite">Cada eje tiene su propio puntaje sobre ${summary.scoring.maxAxisScore}. No se publica un numero unico que los combine: promediarlos enterraria el hallazgo que importa.</p>
+
+${summary.byAxis.map(axisSection).join('')}
+
+${rejectedSection(summary)}
+
+<footer>
+<p>Generado por <code>${escapeHtml(PROGRAM_NAME)} ${escapeHtml(meta.webdiag)}</code> · catalogo <code>${escapeHtml(meta.catalogVersion)}</code> · ${escapeHtml(meta.run.durationMs.toString())} ms</p>
+<table>
+<thead><tr><th>Eje</th><th>Herramienta</th><th>Version</th><th>Estado</th></tr></thead>
+<tbody>${toolRows}</tbody>
+</table>
+</footer>
+</main>
+</body>
+</html>
+`;
+}

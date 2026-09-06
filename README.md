@@ -9,10 +9,11 @@ their output against a stable findings catalog, and emits machine-readable JSON 
 self-contained HTML report. It runs without AI and is usable in CI. Interpreting the
 findings for a specific client is the job of a separate Claude skill, not of this CLI.
 
-> **Status: scaffold.** This repository currently ships the project tooling and the
-> shape of the CLI. `webdiag --help` works; `webdiag scan` is declared in the interface
-> but exits with `2 (not implemented)` until its ticket lands. Nothing here fabricates
-> diagnostic results.
+> **Status: phase 0 — skeleton with fixture data.** The whole pipeline runs end to end
+> (orchestrator → probe → normalizer → report), but the only probe that exists is a stub
+> that returns fixed data. `webdiag scan` writes every artifact of the real contract and
+> the numbers in them are **invented**. Real probes land in phase 1; until then the report
+> is for validating the flow and the design, not for sending to a client.
 
 ## Requirements
 
@@ -42,6 +43,8 @@ bun unlink        # undo it
 ```bash
 webdiag --help       # show the CLI interface
 webdiag --version    # print the version
+
+webdiag scan https://example.com --mode quick --out ./out
 ```
 
 Current output of `webdiag --help`:
@@ -53,7 +56,7 @@ USAGE
   webdiag <command> [options]
 
 COMMANDS
-  scan  Run a technical diagnostic over a URL and write the report artifacts. (not implemented yet)
+  scan  Run a technical diagnostic over a URL and write the report artifacts.
 
 OPTIONS
   -h, --help     Show this help and exit
@@ -63,13 +66,34 @@ EXAMPLES
   webdiag scan <url> [--repo PATH] [--mode quick|deep] [--axes ...] [--pages N] [--out DIR]
 ```
 
-### Planned interface
+### `webdiag scan`
 
 ```
 webdiag scan <url> [--repo PATH] [--mode quick|deep] [--axes ...] [--pages N] [--out DIR]
 ```
 
-Writing into `DIR/`: `raw/`, `findings.json`, `summary.json`, `report.html`, `meta.json`.
+| Flag | Default | Meaning |
+|------|---------|---------|
+| `--mode` | `quick` | `quick` is one URL with no crawl; `deep` samples several pages |
+| `--out` | `./webdiag-out` | Where the artifacts are written |
+| `--axes` | all six | Comma-separated subset of `PERF,A11Y,SEO,DEPS,SEC,AGENT` |
+| `--pages` | `1` quick / `5` deep | Pages a deep run may sample |
+| `--repo` | none | Path to the checkout, for white-box checks |
+
+Writing into `DIR/`:
+
+| Artifact | What it is |
+|----------|------------|
+| `raw/<AXIS>.json` | What each probe produced, before any interpretation |
+| `findings.json` | Catalog IDs with severity, confidence, count and evidence. Deterministic: same input, same bytes |
+| `summary.json` | Per-axis scores and the arithmetic behind them. The **only** file the agent layer reads |
+| `report.html` | Self-contained client report. No scripts, no external requests |
+| `meta.json` | Catalog version, every tool version, runtime and timings |
+
+**There is no composite score.** Each of the six axes is scored independently on 0–100,
+and a `critical` finding marked *blocking* fixes its own axis at 0 instead of being
+averaged away (spec §5.1 and §6). Findings with `confidence: low` are always listed and
+never deducted.
 
 ### Exit codes
 
@@ -78,6 +102,7 @@ Writing into `DIR/`: `raw/`, `findings.json`, `summary.json`, `report.html`, `me
 | `0`  | The requested work completed |
 | `1`  | Usage error (unknown command, missing argument) |
 | `2`  | The command exists in the interface but is not implemented yet |
+| `3`  | The invocation was valid but the run could not produce its artifacts |
 
 ## Scripts
 
@@ -102,12 +127,27 @@ Writing into `DIR/`: `raw/`, `findings.json`, `summary.json`, `report.html`, `me
 │   ├── cli.test.ts            Integration test: spawns the real CLI process
 │   ├── version.ts             VERSION and PROGRAM_NAME constants
 │   ├── version.test.ts        Guards VERSION against drifting from package.json
-│   └── cli/
-│       ├── commands.ts        Declarative registry of the CLI surface
-│       ├── exit-codes.ts      Stable exit-code contract
-│       ├── help.ts            Renders --help and --version from the registry
-│       ├── run.ts             Argv dispatch; returns an exit code, never exits itself
-│       └── run.test.ts        Unit tests for dispatch
+│   ├── cli/
+│   │   ├── commands.ts        Declarative registry of the CLI surface
+│   │   ├── exit-codes.ts      Stable exit-code contract
+│   │   ├── help.ts            Renders --help and --version from the registry
+│   │   ├── run.ts             Argv dispatch; returns an exit code, never exits itself
+│   │   └── scan-command.ts    Adapter: argv in, exit code and console lines out
+│   ├── catalog/               The findings catalog: the contract between the layers
+│   │   ├── entries.ts         The 82 published IDs, transcribed from the normative doc
+│   │   ├── finding.ts         Runtime schema for one finding occurrence
+│   │   ├── scoring.ts         Per-axis scoring and the blocking override rule
+│   │   └── contract-lock.ts   Frozen fingerprints: an ID cannot be redefined in place
+│   └── scan/                  The pipeline
+│       ├── args.ts            Parses `scan` flags into a request
+│       ├── probe.ts           Probe contract; a probe failure never ends the run
+│       ├── stub-probe.ts      Phase 0 probe: fixed data, no network, no external tool
+│       ├── raw.ts             `webdiag.raw/1`, the intermediate format probes emit
+│       ├── normalize.ts       Raw → findings: catalog admission, merge, stable order
+│       ├── summary.ts         Builds `summary.json`, the agent layer's only input
+│       ├── meta.ts            Builds `meta.json`: catalog and tool versions
+│       ├── report.ts          Renders the self-contained `report.html`
+│       └── orchestrator.ts    Wires it together and writes the artifacts
 ├── docs/
 │   ├── inbox/                 Source material: spec and findings catalog
 │   └── agents/                Conventions for agents working in this repo
@@ -116,12 +156,16 @@ Writing into `DIR/`: `raw/`, `findings.json`, `summary.json`, `report.html`, `me
 └── package.json
 ```
 
-Two design rules the scaffold already enforces:
+Design rules the code enforces rather than documents:
 
 - **`run.ts` returns an exit code, it does not call `process.exit`.** Only `cli.ts` touches
   the process. That is what makes the whole CLI testable in-process.
 - **`--help` is rendered from the command registry.** Help text cannot drift from what is
   actually dispatchable, and `run.test.ts` asserts every registered command appears in it.
+- **Nothing time-dependent reaches `findings.json`.** The clock and the machine are
+  confined to `meta.json`, so two runs over the same data produce identical bytes.
+- **No probe failure ends a run.** A probe that throws is recorded as `failed` for its
+  axis; the other five axes still produce a report.
 
 ## Continuous integration
 
