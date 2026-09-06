@@ -185,6 +185,14 @@ describe('parsePage', () => {
 });
 
 describe('countBodyWords', () => {
+  test('a document full of unclosed script tags is counted in linear time', () => {
+    const html = `<body>${'<script>'.repeat(40_000)}</script><p>uno dos</p></body>`;
+    const started = performance.now();
+
+    expect(countBodyWords(html)).toBe(2);
+    expect(performance.now() - started).toBeLessThan(1_000);
+  });
+
   test('counts the prose a crawler would find', () => {
     expect(countBodyWords('<p>uno dos tres</p>')).toBe(3);
   });

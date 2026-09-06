@@ -45,6 +45,7 @@ function isHtml(headers: Readonly<Record<string, string>>): boolean {
 
 async function loadRobots(
   origin: string,
+  scanHost: string,
   options: CollectOptions,
 ): Promise<RobotsFile | undefined> {
   const url = new URL('/robots.txt', origin).toString();
@@ -52,6 +53,7 @@ async function loadRobots(
   try {
     const response = await fetchText(url, {
       timeoutMs: BUDGET.robots,
+      scanHost,
       ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl }),
     });
 
@@ -71,6 +73,7 @@ async function loadRobots(
 async function loadCanonical(
   declared: string | undefined,
   pageUrl: string,
+  scanHost: string,
   options: CollectOptions,
 ): Promise<CanonicalTarget | undefined> {
   if (declared === undefined) {
@@ -110,6 +113,7 @@ async function loadCanonical(
   try {
     const trace = await traceUrl(resolved, {
       timeoutMs: BUDGET.canonical,
+      scanHost,
       ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl }),
     });
 
@@ -156,10 +160,17 @@ function emptySitemap(): SitemapReport {
     root: undefined,
     entryCount: 0,
     byteLength: 0,
+    truncated: false,
     validation: undefined,
     toolError: undefined,
     locs: [],
+    refused: [],
   };
+}
+
+/** The host the operator named. Every derived fetch is checked against it. */
+function scanHostOf(url: string): string {
+  return new URL(url).hostname;
 }
 
 /**
@@ -171,34 +182,38 @@ function emptySitemap(): SitemapReport {
  */
 async function loadEntry(url: string, options: CollectOptions) {
   const fetchOption = options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl };
+  const scanHost = scanHostOf(url);
 
-  const trace = await traceUrl(url, { timeoutMs: BUDGET.page, ...fetchOption });
+  const trace = await traceUrl(url, { timeoutMs: BUDGET.page, scanHost, ...fetchOption });
 
   const page = isHtml(trace.headers) && trace.body !== '' ? await parsePage(trace.body) : undefined;
 
   const origin = new URL(trace.finalUrl).origin;
-  const robots = await loadRobots(origin, options);
+  const robots = await loadRobots(origin, scanHost, options);
 
-  return { trace, page, origin, robots };
+  return { trace, page, origin, robots, scanHost };
 }
 
-function sitemapOptionsFor(options: CollectOptions, followIndex: boolean) {
+function sitemapOptionsFor(options: CollectOptions, scanHost: string, followIndex: boolean) {
   return {
     timeoutMs: BUDGET.sitemap,
     followIndex,
+    scanHost,
     ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl }),
     ...(options.runXmllint === undefined ? {} : { runXmllint: options.runXmllint }),
   };
 }
 
 export async function collect(url: string, options: CollectOptions = {}): Promise<SeoAnalysis> {
-  const { trace, page, origin, robots } = await loadEntry(url, options);
+  const { trace, page, origin, robots, scanHost } = await loadEntry(url, options);
 
   const [sitemap, canonical, links] = await Promise.all([
-    inspectSitemap(origin, robots?.sitemaps ?? [], sitemapOptionsFor(options, false)).catch(
-      emptySitemap,
-    ),
-    loadCanonical(page?.canonicals[0], trace.finalUrl, options),
+    inspectSitemap(
+      origin,
+      robots?.sitemaps ?? [],
+      sitemapOptionsFor(options, scanHost, false),
+    ).catch(emptySitemap),
+    loadCanonical(page?.canonicals[0], trace.finalUrl, scanHost, options),
     checkLinks([trace.finalUrl], {
       timeoutMs: BUDGET.links,
       ...(options.runLychee === undefined ? {} : { run: options.runLychee }),
@@ -231,13 +246,15 @@ export async function collectSite(
   pages: number,
   options: CollectOptions = {},
 ): Promise<SiteAnalysis> {
-  const { trace, page, origin, robots } = await loadEntry(url, options);
+  const { trace, page, origin, robots, scanHost } = await loadEntry(url, options);
 
   const [sitemap, canonical] = await Promise.all([
-    inspectSitemap(origin, robots?.sitemaps ?? [], sitemapOptionsFor(options, true)).catch(
-      emptySitemap,
-    ),
-    loadCanonical(page?.canonicals[0], trace.finalUrl, options),
+    inspectSitemap(
+      origin,
+      robots?.sitemaps ?? [],
+      sitemapOptionsFor(options, scanHost, true),
+    ).catch(emptySitemap),
+    loadCanonical(page?.canonicals[0], trace.finalUrl, scanHost, options),
   ]);
 
   const seed: SeoAnalysis = {
@@ -251,6 +268,7 @@ export async function collectSite(
   };
 
   const crawlOptions: CrawlOptions = {
+    scanHost,
     ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl }),
     ...(options.now === undefined ? {} : { now: options.now }),
   };

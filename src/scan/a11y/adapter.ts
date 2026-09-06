@@ -92,6 +92,21 @@ function sampleOf(rule: AxeRuleResult, node: AxeNode): Sample {
   };
 }
 
+/**
+ * `helpUrl` is read out of `axe.run`'s result, which was computed inside the
+ * audited page. A page that tampers with it must not be able to reject its own
+ * finding (the schema refuses non-http(s) references) or plant a `javascript:`
+ * link in the report, so anything else is dropped and the finding keeps going.
+ */
+function isHttpUrl(value: string): boolean {
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
 function accumulate(accumulator: Accumulator, rule: AxeRuleResult): void {
   accumulator.axeRules.push(rule.id);
   accumulator.count += rule.nodes.length;
@@ -104,7 +119,7 @@ function accumulate(accumulator: Accumulator, rule: AxeRuleResult): void {
     accumulator.worstImpact = rule.impact ?? null;
   }
 
-  if (accumulator.docRef === undefined && rule.helpUrl !== '') {
+  if (accumulator.docRef === undefined && isHttpUrl(rule.helpUrl)) {
     accumulator.docRef = rule.helpUrl;
   }
 

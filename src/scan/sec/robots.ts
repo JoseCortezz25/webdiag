@@ -14,6 +14,8 @@
  * Only the target URL is ever checked, because this probe only ever fetches the
  * target URL. There is no crawl here to constrain.
  */
+
+import { matchesRobotsPattern } from '../text/wildcard.ts';
 import { ROBOTS_TOKEN } from './agent.ts';
 import { type CurlOptions, fetchText } from './curl.ts';
 
@@ -123,19 +125,6 @@ export function selectGroup(
   return best;
 }
 
-/** Translates a robots pattern into a regex: `*` is any run, `$` anchors the end. */
-function toRegExp(pattern: string): RegExp {
-  const anchored = pattern.endsWith('$');
-  const body = anchored ? pattern.slice(0, -1) : pattern;
-
-  const source = body
-    .split('*')
-    .map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
-    .join('.*');
-
-  return new RegExp(`^${source}${anchored ? '$' : ''}`);
-}
-
 /** Length in characters of the pattern, which is RFC 9309's specificity measure. */
 function specificity(rule: RobotsRule): number {
   return rule.pattern.length;
@@ -155,7 +144,7 @@ export function isAllowed(rules: readonly RobotsRule[], path: string): boolean {
       continue;
     }
 
-    if (!toRegExp(rule.pattern).test(path)) {
+    if (!matchesRobotsPattern(rule.pattern, path)) {
       continue;
     }
 

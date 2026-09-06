@@ -47,7 +47,21 @@ export type CrawlOptions = {
   readonly fetchImpl?: Fetcher;
   /** Injected so tests can freeze the deadline instead of racing a real clock. */
   readonly now?: () => number;
+  /** The host the operator named; see `TraceOptions.scanHost`. */
+  readonly scanHost?: string | undefined;
 };
+
+/**
+ * How long one page fetch may take, given how much of the whole crawl is left.
+ *
+ * The per-page budget alone does not bound the crawl: a page started one
+ * second before the deadline would still be allowed its full twelve, and with
+ * four in flight the 75 s total could run to nearly twice that. So a fetch gets
+ * the smaller of the two, and a page with no time left is not started at all.
+ */
+export function pageTimeoutFor(now: number, deadline: number, perPage: number): number {
+  return Math.max(0, Math.min(perPage, deadline - now));
+}
 
 /** Fragment stripped, because `#top` is the same page to every crawler. */
 function normalizeUrl(value: string): string | undefined {
@@ -337,13 +351,16 @@ export async function crawlSite(
   }
 
   const traces = await pooled(targets, CRAWL_BUDGET.concurrency, async (url) => {
-    if (now() >= deadline) {
+    const timeoutMs = pageTimeoutFor(now(), deadline, CRAWL_BUDGET.page);
+
+    if (timeoutMs <= 0) {
       return { url, analysis: undefined, skipped: true } as const;
     }
 
     try {
       const trace = await traceUrl(url, {
-        timeoutMs: CRAWL_BUDGET.page,
+        timeoutMs,
+        scanHost: options.scanHost,
         ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl }),
       });
 

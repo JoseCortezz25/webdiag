@@ -140,4 +140,26 @@ describe('analyzeHtml — robustez', () => {
   test('empty input does not throw', () => {
     expect(analyzeHtml('').textLength).toBe(0);
   });
+
+  test('forty thousand unclosed anchors are analysed in linear time', () => {
+    // Regression: the control counter re-scanned to the end of the document
+    // for every `<a>` without a `</a>`, ~80 s on a 2 MB body.
+    const html = `<body>${'<a href="/x">'.repeat(40_000)}fin</body>`;
+    const started = performance.now();
+
+    const analysis = analyzeHtml(html);
+
+    expect(performance.now() - started).toBeLessThan(1_000);
+    // No `</a>` anywhere: none of them is a closed control, same as before.
+    expect(analysis.interactiveTotal).toBe(0);
+    expect(analysis.textLength).toBe(3);
+  });
+
+  test('forty thousand unclosed scripts do not hide the text after them', () => {
+    const html = `<body>${'<script>'.repeat(40_000)}</script><p>texto</p></body>`;
+    const started = performance.now();
+
+    expect(analyzeHtml(html).textLength).toBe(5);
+    expect(performance.now() - started).toBeLessThan(1_000);
+  });
 });

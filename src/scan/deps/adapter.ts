@@ -266,13 +266,18 @@ function outdatedObservation(analysis: DepsAnalysis): readonly RawObservation[] 
   const listed = [...rows.values()].sort((left, right) => compareStrings(left.npm, right.npm));
   const affected = [...new Set(listed.flatMap((row) => [...row.assets]))].sort();
 
+  // `count` and `affected` share one unit — the served assets — because the
+  // finding schema requires `affected.length <= count`. One outdated library
+  // served from two bundles is two affected places; the per-library breakdown
+  // lives in `evidence.libraries`, with its own total.
   return [
     {
       id: 'DEPS-LIB-OUTDATED',
       confidence: 'medium',
-      count: listed.length,
+      count: affected.length,
       affected,
       evidence: {
+        library_count: listed.length,
         libraries: listed.map((row) => ({
           library: row.library,
           npm: row.npm,

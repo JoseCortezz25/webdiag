@@ -76,8 +76,12 @@ describe('parseScanArgs', () => {
     expect(request(['https://example.com', '--mode', 'deep', '--pages', '5']).pages).toBe(5);
   });
 
-  test('quick keeps ignoring the window: --pages there is not a deep sample', () => {
-    expect(request(['https://example.com', '--pages', '3']).pages).toBe(3);
+  test('quick rejects --pages instead of accepting a number it will ignore', () => {
+    expect(error(['https://example.com', '--pages', '3'])).toContain('only applies to --mode deep');
+    expect(error(['https://example.com', '--pages', '99999'])).toContain(
+      'only applies to --mode deep',
+    );
+    expect(request(['https://example.com']).pages).toBe(1);
   });
 
   test('--fail-on is absent by default: no CI budget applies', () => {

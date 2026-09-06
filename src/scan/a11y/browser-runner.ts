@@ -20,7 +20,16 @@
  *    `runProbe` degrades the axis honestly.
  */
 import { createRequire } from 'node:module';
-import puppeteer, { TimeoutError } from 'puppeteer';
+import puppeteer, { type Browser, type LaunchOptions, TimeoutError } from 'puppeteer';
+// The PERF module owns the Chrome pin; every browser probe launches that same
+// binary so `meta.json` records one browser, not three.
+import {
+  CHROME_TOOL_NAME,
+  headlessLaunchOptions,
+  type ResolvedChrome,
+  resolveChromeOnce,
+  sandboxArgs,
+} from '../perf/chrome.ts';
 import type { ProbeContext } from '../probe.ts';
 import type { ToolVersion } from '../raw.ts';
 import type { AxeAnalysis } from './adapter.ts';
@@ -47,17 +56,14 @@ const VIEWPORT = { width: 1366, height: 768, deviceScaleFactor: 1 } as const;
  */
 const AXE_OPTIONS = { resultTypes: ['violations', 'incomplete'] } as const;
 
-/**
- * Chrome's sandbox stays on by default, because this probe renders whatever a
- * client site serves and that is untrusted code. Some CI containers cannot
- * create the user namespace the sandbox needs, so turning it off is available —
- * as an explicit, named opt-in, never as a silent fallback on launch failure.
- */
-function launchArgs(): readonly string[] {
-  return process.env.WEBDIAG_CHROME_NO_SANDBOX === '1'
-    ? ['--no-sandbox', '--disable-dev-shm-usage']
-    : [];
-}
+export type BrowserLauncher = (options: LaunchOptions) => Promise<Browser>;
+
+export type BrowserRunnerOptions = {
+  /** Injected in tests; production resolves the pinned build once per process. */
+  readonly chrome?: ResolvedChrome;
+  /** Injected in tests to assert what would be launched without launching it. */
+  readonly launch?: BrowserLauncher;
+};
 
 let cachedAxeSource: string | undefined;
 
@@ -71,9 +77,20 @@ function isTimeout(cause: unknown): boolean {
   return cause instanceof TimeoutError;
 }
 
-/** Runs axe-core against the rendered page and reports what rendered it. */
-export async function analyzeWithBrowser(context: ProbeContext): Promise<AxeAnalysis> {
-  const browser = await puppeteer.launch({ headless: true, args: [...launchArgs()] });
+/**
+ * Runs axe-core against the rendered page and reports what rendered it.
+ *
+ * The browser is the pinned `chrome-headless-shell`, resolved (and downloaded
+ * once if needed) by the PERF module — never puppeteer's own postinstall
+ * download, which a consumer install may legitimately have skipped.
+ */
+export async function analyzeWithBrowser(
+  context: ProbeContext,
+  options: BrowserRunnerOptions = {},
+): Promise<AxeAnalysis> {
+  const chrome = options.chrome ?? (await resolveChromeOnce());
+  const launch = options.launch ?? ((launchOptions) => puppeteer.launch(launchOptions));
+  const browser = await launch(headlessLaunchOptions(chrome, sandboxArgs()));
 
   try {
     const page = await browser.newPage();
@@ -113,11 +130,13 @@ export async function analyzeWithBrowser(context: ProbeContext): Promise<AxeAnal
       await page.evaluate(`axe.run(document, ${JSON.stringify(AXE_OPTIONS)})`),
     );
 
-    const chrome: ToolVersion = { name: 'chrome', version: await browserVersion(browser) };
+    // The version the binary itself reported when it was resolved: the pin is a
+    // request, and only the binary can confirm what actually rendered the page.
+    const browserTool: ToolVersion = { name: CHROME_TOOL_NAME, version: chrome.version };
 
     return {
       report,
-      browser: chrome,
+      browser: browserTool,
       pageUrl: page.url(),
       httpStatus,
       navigationTimedOut,
@@ -125,10 +144,4 @@ export async function analyzeWithBrowser(context: ProbeContext): Promise<AxeAnal
   } finally {
     await browser.close();
   }
-}
-
-/** `Chrome/152.0.7977.75` → `152.0.7977.75`. Falls back to the raw string. */
-async function browserVersion(browser: { version(): Promise<string> }): Promise<string> {
-  const raw = await browser.version();
-  return raw.split('/')[1] ?? raw;
 }

@@ -26,6 +26,7 @@ export function trace(overrides: Partial<FetchTrace> = {}): FetchTrace {
     headers: { 'content-type': 'text/html; charset=utf-8' },
     body: '',
     truncated: false,
+    contentLength: undefined,
     hops: [],
     loop: false,
     loopAt: undefined,
@@ -82,9 +83,11 @@ export function sitemap(overrides: Partial<SitemapReport> = {}): SitemapReport {
     root: 'urlset',
     entryCount: 40,
     byteLength: 4_096,
+    truncated: false,
     validation: { valid: true, schema: 'sitemap', errors: [] },
     toolError: undefined,
     locs: [],
+    refused: [],
     ...overrides,
   };
 }

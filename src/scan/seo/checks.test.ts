@@ -24,7 +24,7 @@ import {
   sitemap,
   trace,
 } from './analysis.fixture.ts';
-import { isValidLanguageTag, toObservations } from './checks.ts';
+import { coverageNotes, isValidLanguageTag, toObservations } from './checks.ts';
 
 function idsOf(analysis: Parameters<typeof toObservations>[0]): readonly string[] {
   return toObservations(analysis).map((observation) => observation.id);
@@ -299,6 +299,33 @@ describe('sitemap', () => {
     const analysis = healthy({ sitemap: sitemap({ entryCount: 50_001 }) });
 
     expect(find(analysis, 'SEO-SITEMAP-LIMITS-EXCEEDED')?.evidence.urls).toBe(50_001);
+  });
+
+  test('SEO-SITEMAP-LIMITS-EXCEEDED fires on a declared size past 50 MB even when the read was cut', () => {
+    const analysis = healthy({
+      sitemap: sitemap({ byteLength: 60 * 1024 * 1024, truncated: true, validation: undefined }),
+    });
+
+    expect(idsOf(analysis)).toContain('SEO-SITEMAP-LIMITS-EXCEEDED');
+    // Only a prefix was read, so no schema verdict exists and none is invented.
+    expect(idsOf(analysis)).not.toContain('SEO-SITEMAP-INVALID');
+  });
+
+  test('a truncated sitemap and a refused Sitemap: line are stated in the coverage notes', () => {
+    const notes = coverageNotes(
+      healthy({
+        sitemap: sitemap({
+          truncated: true,
+          validation: undefined,
+          refused: ['http://169.254.169.254/latest/'],
+        }),
+      }),
+    );
+
+    expect(notes).toHaveLength(2);
+    expect(notes[0]).toContain('prefijo');
+    expect(notes[1]).toContain('169.254.169.254');
+    expect(coverageNotes(healthy())).toEqual([]);
   });
 
   test('SEO-SITEMAP-LIMITS-EXCEEDED fires past 50 MB', () => {

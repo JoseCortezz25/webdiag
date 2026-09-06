@@ -3,11 +3,15 @@ import packageJson from '../../../package.json' with { type: 'json' };
 import {
   CHROME_TOOL_NAME,
   chromeCacheDir,
+  debuggingPortOf,
+  headlessLaunchOptions,
   PINNED_CHROME_BUILD,
   parseChromeVersion,
   pinnedExecutablePath,
+  type ResolvedChrome,
+  sandboxArgs,
 } from './chrome.ts';
-import { PINNED_LIGHTHOUSE_VERSION } from './lighthouse.ts';
+import { LIGHTHOUSE_CHROME_FLAGS, PINNED_LIGHTHOUSE_VERSION } from './lighthouse.ts';
 
 describe('the pin', () => {
   test('the declared Lighthouse version is the installed one', async () => {
@@ -25,9 +29,11 @@ describe('the pin', () => {
     expect(dependencies.lighthouse).toBe(PINNED_LIGHTHOUSE_VERSION);
     expect(dependencies.lighthouse).not.toContain('^');
     expect(dependencies['@puppeteer/browsers']).not.toContain('^');
-    // Declared even though Lighthouse pulls it in: `lighthouse.ts` imports it
-    // directly, and a package we import is a package we own the version of.
-    expect(dependencies['chrome-launcher']).not.toContain('^');
+    expect(dependencies.puppeteer).not.toContain('^');
+    // Not a dependency any more: under WSL it guessed a Windows temp path and
+    // created a literal `C:\Users\...` directory in the operator's cwd. Every
+    // browser probe launches through puppeteer instead.
+    expect(dependencies['chrome-launcher']).toBeUndefined();
   });
 
   test('the Chrome build is a full four-part version', () => {
@@ -65,5 +71,60 @@ describe('pinnedExecutablePath', () => {
     expect(path.startsWith('/cache/')).toBe(true);
     expect(path).toContain(PINNED_CHROME_BUILD);
     expect(path).toContain(CHROME_TOOL_NAME);
+  });
+});
+
+const RESOLVED: ResolvedChrome = {
+  executablePath: '/opt/chrome/chrome-headless-shell',
+  version: PINNED_CHROME_BUILD,
+  buildId: PINNED_CHROME_BUILD,
+  pinned: true,
+  source: 'cache',
+};
+
+describe('headlessLaunchOptions', () => {
+  test('launches the resolved binary as the headless shell it is', () => {
+    const options = headlessLaunchOptions(RESOLVED, ['--no-sandbox']);
+
+    expect(options.executablePath).toBe(RESOLVED.executablePath);
+    // The pinned binary is chrome-headless-shell; `--headless=new` (what
+    // `headless: true` sends) is not something it understands.
+    expect(options.headless).toBe('shell');
+    expect(options.args).toEqual(['--no-sandbox']);
+  });
+
+  test('never forwards a --headless flag of its own', () => {
+    const options = headlessLaunchOptions(RESOLVED, [
+      '--headless',
+      '--headless=new',
+      '--disable-gpu',
+    ]);
+
+    expect(options.args).toEqual(['--disable-gpu']);
+  });
+
+  test('the Lighthouse flag set carries no --headless either', () => {
+    expect(LIGHTHOUSE_CHROME_FLAGS.some((flag) => flag.startsWith('--headless'))).toBe(false);
+  });
+});
+
+describe('sandboxArgs', () => {
+  test('keeps the sandbox on unless explicitly opted out', () => {
+    expect(sandboxArgs({})).toEqual([]);
+    expect(sandboxArgs({ WEBDIAG_CHROME_NO_SANDBOX: '0' })).toEqual([]);
+    expect(sandboxArgs({ WEBDIAG_CHROME_NO_SANDBOX: '1' })).toEqual([
+      '--no-sandbox',
+      '--disable-dev-shm-usage',
+    ]);
+  });
+});
+
+describe('debuggingPortOf', () => {
+  test('reads the port Lighthouse must connect to from the browser endpoint', () => {
+    expect(debuggingPortOf('ws://127.0.0.1:9222/devtools/browser/0b6a-4f')).toBe(9222);
+  });
+
+  test('refuses an endpoint with no port instead of handing Lighthouse NaN', () => {
+    expect(() => debuggingPortOf('ws://127.0.0.1/devtools/browser/x')).toThrow(/debugging port/);
   });
 });

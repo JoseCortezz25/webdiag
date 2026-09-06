@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, test } from 'bun:test';
-import { type ArtifactWriter, stubProbes } from '../scan/index.ts';
+import { type ArtifactWriter, type Probe, stubProbes } from '../scan/index.ts';
 import { COMMANDS } from './commands.ts';
 import { EXIT } from './exit-codes.ts';
 import { type CliOutput, runCli } from './run.ts';
@@ -126,6 +126,60 @@ describe('runCli', () => {
       ['scan', 'https://example.com', '--out', '/tmp/x', '--axes', 'SEC', '--fail-on', 'critical'],
       io,
       { writer: memoryWriter(), probes: stubProbes() },
+    );
+
+    expect(code).toBe(EXIT.OK);
+  });
+
+  test('a failed probe exits with PROBE_FAILED even without a budget', async () => {
+    // Regression: a scan whose browser never started used to exit 0 with no
+    // findings for that axis, indistinguishable in CI from a clean site.
+    const broken: Probe = {
+      axis: 'SEC',
+      tool: { name: 'broken', version: '0.0.0' },
+      run: () => Promise.reject(new Error('testssl.sh not on PATH')),
+    };
+    const probes = [...stubProbes().filter((probe) => probe.axis !== 'SEC'), broken];
+
+    const code = await runCli(['scan', 'https://example.com', '--out', '/tmp/x'], io, {
+      writer: memoryWriter(),
+      probes,
+    });
+
+    expect(code).toBe(EXIT.PROBE_FAILED);
+    expect(io.err.join('\n')).toContain('probe for SEC failed: testssl.sh not on PATH');
+    expect(io.err.join('\n')).toContain('1 of 6 requested axes could not be measured');
+  });
+
+  test('a budget breach outranks a failed probe in the exit code', async () => {
+    const broken: Probe = {
+      axis: 'SEC',
+      tool: { name: 'broken', version: '0.0.0' },
+      run: () => Promise.reject(new Error('testssl.sh not on PATH')),
+    };
+    const probes = [...stubProbes().filter((probe) => probe.axis !== 'SEC'), broken];
+
+    const code = await runCli(
+      ['scan', 'https://example.com', '--out', '/tmp/x', '--fail-on', 'critical'],
+      io,
+      { writer: memoryWriter(), probes },
+    );
+
+    expect(code).toBe(EXIT.BUDGET_EXCEEDED);
+  });
+
+  test('a failed probe outside the requested axes does not change the exit code', async () => {
+    const broken: Probe = {
+      axis: 'SEC',
+      tool: { name: 'broken', version: '0.0.0' },
+      run: () => Promise.reject(new Error('testssl.sh not on PATH')),
+    };
+    const probes = [...stubProbes().filter((probe) => probe.axis !== 'SEC'), broken];
+
+    const code = await runCli(
+      ['scan', 'https://example.com', '--out', '/tmp/x', '--axes', 'SEO'],
+      io,
+      { writer: memoryWriter(), probes },
     );
 
     expect(code).toBe(EXIT.OK);

@@ -15,7 +15,7 @@ import { VERSION } from '../../version.ts';
 import type { Probe, ProbeContext } from '../probe.ts';
 import { RAW_SCHEMA_VERSION, type RawDocument, type ToolVersion } from '../raw.ts';
 import type { SeoAnalysis } from './analysis.ts';
-import { mergeObservations, pageObservations, toObservations } from './checks.ts';
+import { coverageNotes, mergeObservations, pageObservations, toObservations } from './checks.ts';
 import { collect, collectSite } from './collect.ts';
 import { siteObservations } from './deep-checks.ts';
 import { lycheeVersion } from './links.ts';
@@ -81,7 +81,7 @@ function deepDocument(site: SiteAnalysis, context: ProbeContext, tool: ToolVersi
     tool,
     target: { url: context.url, mode: context.mode },
     observations,
-    notes: [coverage, ...site.notes, ...deep.notes],
+    notes: [coverage, ...coverageNotes(site.seed), ...site.notes, ...deep.notes],
   };
 }
 
@@ -100,6 +100,7 @@ export function seoProbe(
       }
 
       const [analysis, tool] = await Promise.all([gather(context), resolveToolVersion()]);
+      const notes = coverageNotes(analysis);
 
       return {
         schema: RAW_SCHEMA_VERSION,
@@ -107,6 +108,7 @@ export function seoProbe(
         tool,
         target: { url: context.url, mode: context.mode },
         observations: toObservations(analysis),
+        ...(notes.length === 0 ? {} : { notes }),
       };
     },
   };

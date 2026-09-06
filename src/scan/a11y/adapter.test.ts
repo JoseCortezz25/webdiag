@@ -187,6 +187,31 @@ describe('the catalog contract the probe has to honour', () => {
     expect(agent.score).toBe(100);
   });
 
+  test('a helpUrl that is not http(s) is dropped and the finding survives', () => {
+    // `helpUrl` comes out of `axe.run` inside the audited page. A tampered
+    // value must neither reach the report as a link nor sink the finding.
+    const observations = toObservations(
+      withViolations(axeRule('image-alt', ['img'], { helpUrl: 'javascript:alert(1)' })),
+    );
+    const observation = byId(observations, 'A11Y-IMG-ALT-MISSING');
+
+    expect(observation).toBeDefined();
+    expect(observation?.doc_ref).toBeUndefined();
+
+    const { findings, rejected } = findingsFor(observations);
+    expect(rejected).toEqual([]);
+    expect(findings.map((finding) => finding.id)).toContain('A11Y-IMG-ALT-MISSING');
+  });
+
+  test('a genuine https helpUrl is kept as the doc_ref', () => {
+    const observation = byId(
+      toObservations(withViolations(axeRule('image-alt', ['img']))),
+      'A11Y-IMG-ALT-MISSING',
+    );
+
+    expect(observation?.doc_ref).toBe('https://dequeuniversity.com/rules/axe/4.13/image-alt');
+  });
+
   test('every observation the adapter emits is accepted by the catalog', () => {
     const { findings, rejected } = findingsFor(
       toObservations(

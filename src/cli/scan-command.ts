@@ -75,6 +75,16 @@ export async function runScanCommand(
       }
     }
 
+    // A failed probe has already narrowed the run and been reported above. It
+    // still must not exit clean: no findings from an axis that never measured
+    // is not the same as a clean axis, and a CI gate has to be able to tell.
+    if (failed.length > 0) {
+      out.stderr(
+        `${PROGRAM_NAME}: ${failed.length} of ${request.axes.length} requested axes could not be measured`,
+      );
+      return EXIT.PROBE_FAILED;
+    }
+
     return EXIT.OK;
   } catch (cause) {
     out.stderr(`${PROGRAM_NAME}: scan failed: ${messageOf(cause)}`);

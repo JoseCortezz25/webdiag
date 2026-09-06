@@ -13,14 +13,23 @@
  * references, and a validation that reaches the network is a validation that
  * can be made to say anything by whoever controls that host.
  */
-import { unlink } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { fetchText, type TraceOptions } from './http.ts';
+import { join } from 'node:path';
+import { isSameSite } from '../net/address-guard.ts';
+import { fetchText, MAX_BODY_BYTES, type TraceOptions } from './http.ts';
 import { SITEINDEX_XSD, SITEMAP_XSD } from './sitemap-schema.ts';
 
 /** sitemaps.org: 50,000 URLs and 50 MB uncompressed, per file. */
 export const MAX_SITEMAP_URLS = 50_000;
 export const MAX_SITEMAP_BYTES = 50 * 1024 * 1024;
+
+/**
+ * How long `xmllint` may take over one document. Validation of a 2 MB file is
+ * a matter of milliseconds; anything approaching this is a hang, not a slow
+ * run, and a hung validator must not stall the whole axis.
+ */
+export const XMLLINT_TIMEOUT_MS = 15_000;
 
 export type SitemapValidation = {
   readonly valid: boolean;
@@ -37,8 +46,20 @@ export type SitemapReport = {
   /** True when `robots.txt` names the sitemap that was found. */
   readonly declaredInRobots: boolean;
   readonly root: 'urlset' | 'sitemapindex' | 'unknown' | undefined;
+  /** Entries counted in the bytes that were read. A lower bound when `truncated`. */
   readonly entryCount: number;
+  /**
+   * The size of the document. From `content-length` when the server declared
+   * one; otherwise the bytes read, which is at least the fetch cap when the
+   * body was cut there.
+   */
   readonly byteLength: number;
+  /**
+   * True when the document was longer than the fetch cap and only a prefix was
+   * read. Schema validation is skipped in that case: validating half a file
+   * would report a broken sitemap that is merely large.
+   */
+  readonly truncated: boolean;
   readonly validation: SitemapValidation | undefined;
   /** Set when the check could not run at all — a missing `xmllint`, say. */
   readonly toolError: string | undefined;
@@ -48,6 +69,12 @@ export type SitemapReport = {
    * `followIndex` is what asks for that.
    */
   readonly locs: readonly string[];
+  /**
+   * Candidates that were declared but not fetched because they point off the
+   * scanned site. A `Sitemap:` line is written by the site being scanned, and a
+   * scanner that follows it anywhere can be pointed at anything.
+   */
+  readonly refused: readonly string[];
 };
 
 export type SitemapOptions = TraceOptions & {
@@ -142,7 +169,11 @@ async function collectIndexedLocs(
 ): Promise<readonly string[]> {
   const out: string[] = [];
 
-  for (const child of childUrls.slice(0, MAX_CHILD_SITEMAPS)) {
+  const scanHost = options.scanHost;
+  const sameSite =
+    scanHost === undefined ? childUrls : childUrls.filter((child) => isSameSite(child, scanHost));
+
+  for (const child of sameSite.slice(0, MAX_CHILD_SITEMAPS)) {
     try {
       const response = await fetchText(child, options);
 
@@ -176,35 +207,54 @@ async function locsFor(
   return root === 'sitemapindex' ? collectIndexedLocs(declared, options) : declared;
 }
 
-/** Writes both files, runs `xmllint`, and always removes them again. */
+/**
+ * Writes both files into a private temp directory, runs `xmllint` under a
+ * timeout, and always removes the directory again.
+ *
+ * `mkdtemp` rather than a timestamp-and-random name: the directory is created
+ * atomically with a name nobody else holds, so two concurrent runs cannot
+ * collide and nothing can be pre-placed at the path.
+ */
 export async function runXmllintValidation(
   schema: string,
   document: string,
 ): Promise<{ readonly ok: boolean; readonly stderr: string }> {
-  const stamp = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  const schemaPath = `${tmpdir()}/webdiag-sitemap-${stamp}.xsd`;
-  const documentPath = `${tmpdir()}/webdiag-sitemap-${stamp}.xml`;
-
-  await Bun.write(schemaPath, schema);
-  await Bun.write(documentPath, document);
+  const directory = await mkdtemp(join(tmpdir(), 'webdiag-sitemap-'));
+  const schemaPath = join(directory, 'schema.xsd');
+  const documentPath = join(directory, 'document.xml');
 
   try {
-    const process = Bun.spawn(
+    await Bun.write(schemaPath, schema);
+    await Bun.write(documentPath, document);
+
+    const child = Bun.spawn(
       ['xmllint', '--noout', '--nonet', '--schema', schemaPath, documentPath],
-      { stdout: 'pipe', stderr: 'pipe' },
+      {
+        stdout: 'pipe',
+        stderr: 'pipe',
+        // Bun sends SIGTERM at `timeout` and escalates to SIGKILL if the process
+        // is still alive after `killSignal` handling — the same shape every other
+        // subprocess wrapper in this codebase uses.
+        timeout: XMLLINT_TIMEOUT_MS,
+        killSignal: 'SIGKILL',
+      },
     );
 
-    const [exitCode, stderr] = await Promise.all([
-      process.exited,
-      new Response(process.stderr).text(),
+    const [exitCode, stderr, stdout] = await Promise.all([
+      child.exited,
+      new Response(child.stderr).text(),
+      new Response(child.stdout).text(),
     ]);
 
-    return { ok: exitCode === 0, stderr };
+    // `killed` is true whenever a `timeout` was configured, so it says nothing;
+    // a process that died to a signal has no exit code and a signal name.
+    if (child.signalCode !== null) {
+      throw new Error(`xmllint exceeded ${XMLLINT_TIMEOUT_MS} ms and was stopped`);
+    }
+
+    return { ok: exitCode === 0, stderr: stderr === '' ? stdout : stderr };
   } finally {
-    await Promise.all([
-      unlink(schemaPath).catch(() => undefined),
-      unlink(documentPath).catch(() => undefined),
-    ]);
+    await rm(directory, { recursive: true, force: true }).catch(() => undefined);
   }
 }
 
@@ -245,7 +295,11 @@ export async function inspectSitemap(
   options: SitemapOptions,
 ): Promise<SitemapReport> {
   const conventional = new URL('/sitemap.xml', origin).toString();
-  const candidates = [...new Set([...declared, conventional])];
+  const scanHost = options.scanHost ?? new URL(origin).hostname;
+  const refused = declared.filter((candidate) => !isSameSite(candidate, scanHost));
+  const candidates = [...new Set([...declared, conventional])].filter(
+    (candidate) => !refused.includes(candidate),
+  );
   const runner = options.runXmllint ?? runXmllintValidation;
 
   const empty: SitemapReport = {
@@ -257,9 +311,11 @@ export async function inspectSitemap(
     root: undefined,
     entryCount: 0,
     byteLength: 0,
+    truncated: false,
     validation: undefined,
     toolError: undefined,
     locs: [],
+    refused,
   };
 
   for (const candidate of candidates) {
@@ -281,7 +337,10 @@ export async function inspectSitemap(
       continue;
     }
 
-    const byteLength = new TextEncoder().encode(response.body).length;
+    const readBytes = new TextEncoder().encode(response.body).length;
+    const truncated = response.truncated;
+    const byteLength =
+      response.contentLength ?? (truncated ? Math.max(readBytes, MAX_BODY_BYTES) : readBytes);
     const entryCount = countEntries(response.body, root);
     const declaredInRobots = declared.includes(candidate);
     const locs = await locsFor(response.body, root, options);
@@ -296,12 +355,30 @@ export async function inspectSitemap(
         root,
         entryCount,
         byteLength,
+        truncated,
         locs,
         validation: {
           valid: false,
           schema: 'sitemap',
           errors: ['the document root is not <urlset> nor <sitemapindex>'],
         },
+      };
+    }
+
+    if (truncated) {
+      // Only a prefix was read. Validating it would fail on the cut, and that
+      // failure would be about the fetch cap, not about the sitemap.
+      return {
+        ...empty,
+        url: candidate,
+        status: response.status,
+        found: true,
+        declaredInRobots,
+        root,
+        entryCount,
+        byteLength,
+        truncated,
+        locs,
       };
     }
 
@@ -319,6 +396,7 @@ export async function inspectSitemap(
         root,
         entryCount,
         byteLength,
+        truncated,
         locs,
         validation: {
           valid: result.ok,
@@ -337,6 +415,7 @@ export async function inspectSitemap(
         root,
         entryCount,
         byteLength,
+        truncated,
         locs,
         toolError: cause instanceof Error ? cause.message : String(cause),
       };
