@@ -112,6 +112,33 @@ describe('parseLycheeOutput', () => {
     expect(report.broken).toEqual([]);
   });
 
+  test('the same broken URL linked from several pages counts once (issue #12)', () => {
+    // error_map is keyed by source page: a footer link broken on every crawled
+    // page arrives once per page, plus a cached echo in deep mode.
+    const report = parseLycheeOutput(
+      JSON.stringify({
+        error_map: {
+          'https://example.com/': [
+            {
+              url: 'https://dead.test/footer',
+              status: { text: 'Rejected status code', code: 999 },
+            },
+          ],
+          'https://example.com/precios': [
+            { url: 'https://dead.test/footer', status: { text: 'Error (cached)', code: 999 } },
+          ],
+          'https://example.com/about': [
+            { url: 'https://dead.test/footer', status: { text: 'Error (cached)', code: 999 } },
+          ],
+        },
+      }),
+    );
+
+    expect(report.broken).toEqual([
+      { url: 'https://dead.test/footer', status: 'Rejected status code', code: 999 },
+    ]);
+  });
+
   test('an entry with no status text is reported as unknown, not as missing', () => {
     const report = parseLycheeOutput(
       JSON.stringify({ error_map: { page: [{ url: 'https://a.test/' }] } }),

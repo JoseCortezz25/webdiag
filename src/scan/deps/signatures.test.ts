@@ -35,6 +35,16 @@ describe('detectLibraries', () => {
     expect(detectLibraries('export function total(items){return items.length}')).toEqual([]);
   });
 
+  test('does not mistake gtag.js/gtm.js for jQuery (issue #12)', () => {
+    // Google's analytics bundles carry a stray jQuery license comment above an
+    // unrelated internal helper, with no jQuery.fn.jquery anywhere nearby.
+    const gtag =
+      'function wb(a){return pb(a)};/*\n jQuery (c) 2005, 2012 jQuery Foundation, ' +
+      'Inc. jquery.org/license.\n*/\nvar xb=/\\[object (Boolean|Number)\\]/';
+
+    expect(detectLibraries(gtag)).toEqual([]);
+  });
+
   test('every signature has a distinct library name', () => {
     const names = LIBRARY_SIGNATURES.map((signature) => signature.library);
 

@@ -8,6 +8,7 @@ import {
   cvesOf,
   EPSS_HIGH_THRESHOLD,
   isMajorBehind,
+  isVendoredRuntimeVersion,
   majorOf,
   npmNameFor,
 } from './mapping.ts';
@@ -88,6 +89,14 @@ describe('version comparison', () => {
     expect(isMajorBehind('3.4.1', '3.7.1')).toBe(false);
     expect(isMajorBehind('3.7.1', '3.4.1')).toBe(false);
     expect(isMajorBehind('3.4.1', 'unknown')).toBe(false);
+  });
+
+  test('a canary or nightly is framework-vendored, never an author choice (issue #12)', () => {
+    expect(isVendoredRuntimeVersion('18.3.0-canary-178c267a4e-20241218')).toBe(true);
+    expect(isVendoredRuntimeVersion('0.0.0-nightly-20240101')).toBe(true);
+    expect(isVendoredRuntimeVersion('3.4.1')).toBe(false);
+    expect(isVendoredRuntimeVersion('3.0.0-beta.1')).toBe(false);
+    expect(isVendoredRuntimeVersion('4.0.0-rc.2')).toBe(false);
   });
 });
 

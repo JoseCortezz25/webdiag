@@ -165,7 +165,7 @@ describe('depsProbe in white-box mode (context.repo set)', () => {
  * only a browser would ever see.
  */
 const VENDOR_JS = `/*! jQuery v3.4.1 | (c) JS Foundation and other contributors | jquery.org/license */
-window.jQuery=function(){};
+window.jQuery=function(){jQuery.fn=jQuery.prototype={jquery:"3.4.1"}};jQuery.fn.jquery;
 //# sourceMappingURL=vendor.js.map
 `;
 

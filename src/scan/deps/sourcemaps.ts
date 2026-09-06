@@ -29,6 +29,8 @@ export type SourcemapFinding = {
   readonly sources: number;
   /** Whether the original source text itself ships inside the map. */
   readonly sourcesContent: boolean;
+  /** Served by an origin other than the page's — see the adapter for why this matters. */
+  readonly thirdParty: boolean;
 };
 
 /** Enough tail to hold the comment; not enough to re-read a megabyte bundle. */
@@ -163,6 +165,7 @@ export async function findExposedSourcemaps(
           url: 'inline',
           kind: 'inline',
           status: asset.status,
+          thirdParty: asset.thirdParty,
           ...payload,
         });
       }
@@ -193,6 +196,7 @@ export async function findExposedSourcemaps(
         url: candidate.url,
         kind: candidate.kind,
         status: response.status,
+        thirdParty: asset.thirdParty,
         ...payload,
       });
     }

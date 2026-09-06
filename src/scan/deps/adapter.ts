@@ -26,6 +26,7 @@ import {
   confidenceFor,
   cvesOf,
   isMajorBehind,
+  isVendoredRuntimeVersion,
   npmNameFor,
 } from './mapping.ts';
 import type { RetireReport, RetireResult } from './retire.ts';
@@ -216,6 +217,10 @@ function vulnerabilityObservations(analysis: DepsAnalysis): readonly RawObservat
  * Only the major is compared. A patch or minor behind is normal operation, and
  * reporting it would bury the case the catalogue actually describes — a library
  * far enough behind that security fixes have stopped arriving for it.
+ *
+ * A framework-vendored canary/nightly build is excluded outright (issue #12):
+ * see `isVendoredRuntimeVersion` for why comparing it against npm's latest
+ * stable tag is not a gap the site owner can close.
  */
 function outdatedObservation(analysis: DepsAnalysis): readonly RawObservation[] {
   const urls = assetIndex(analysis.collection);
@@ -232,7 +237,11 @@ function outdatedObservation(analysis: DepsAnalysis): readonly RawObservation[] 
       const npm = npmNameFor(result);
       const latest = analysis.enrichment.registry.latest[npm];
 
-      if (latest === undefined || !isMajorBehind(result.version, latest)) {
+      if (
+        latest === undefined ||
+        !isMajorBehind(result.version, latest) ||
+        isVendoredRuntimeVersion(result.version)
+      ) {
         continue;
       }
 
@@ -283,16 +292,24 @@ function outdatedObservation(analysis: DepsAnalysis): readonly RawObservation[] 
  * `DEPS-SOURCEMAP-EXPOSED`. The catalogue makes DEPS the owning axis and lets
  * SEC mention it without deducting, so the probe emits it once here and the
  * normalizer routes it; nothing about that split lives in this file.
+ *
+ * Third-party maps are dropped before anything else (issue #12). A public
+ * package served from a CDN — `gsap`, `swiper` — routinely publishes its own
+ * sourcemap; that reveals the library author's source, not the client's. The
+ * calibration run against `hipintocol.co` reported "el código fuente original
+ * de la aplicación es descargable" for exactly that case: two jsDelivr-hosted
+ * packages, zero lines of the client's own code. Only same-origin maps can
+ * expose the application this finding is about.
  */
 function sourcemapObservation(analysis: DepsAnalysis): readonly RawObservation[] {
-  if (analysis.sourcemaps.length === 0) {
+  const firstParty = analysis.sourcemaps.filter((map) => !map.thirdParty);
+
+  if (firstParty.length === 0) {
     return [];
   }
 
   const origin = analysis.collection.pageOrigin;
-  const maps = [...analysis.sourcemaps].sort((left, right) =>
-    compareStrings(left.asset, right.asset),
-  );
+  const maps = [...firstParty].sort((left, right) => compareStrings(left.asset, right.asset));
   const withSource = maps.filter((map) => map.sourcesContent).length;
 
   return [
