@@ -1,10 +1,14 @@
 import { describe, expect, test } from 'bun:test';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { ACTIVE_CATALOG_IDS, isBlocking, requireEntry } from '../../catalog/index.ts';
 import type { CommandRunner } from './curl.ts';
 import {
   analyzeTestssl,
   daysToExpiry,
   EXPIRING_THRESHOLD_DAYS,
+  findProjectRoot,
   parseTestsslJson,
   runTestssl,
   type TestsslEntry,
@@ -194,6 +198,50 @@ describe('analyzeTestssl', () => {
  * file holding one `scanProblem` row, and an axis that has silently stopped
  * measuring TLS. macOS ships no `timeout`, so that is the default there.
  */
+/**
+ * `bun run ./src/cli.ts` and the bundled `dist/cli.js` put this module at two
+ * different depths under the project root (`src/scan/sec/` vs `dist/`). A
+ * fixed `../../..` matched only one of them and silently lost `vendor/`
+ * lookups on the built binary — the exact shape that shipped uncaught.
+ */
+describe('findProjectRoot', () => {
+  test('finds the root from a deeply nested directory (src/scan/sec-shaped)', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'webdiag-root-'));
+
+    try {
+      await Bun.write(join(root, 'package.json'), '{}');
+      const nested = join(root, 'src', 'scan', 'sec');
+
+      expect(await findProjectRoot(nested)).toBe(root);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test('finds the root from a shallow directory (dist-shaped)', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'webdiag-root-'));
+
+    try {
+      await Bun.write(join(root, 'package.json'), '{}');
+      const shallow = join(root, 'dist');
+
+      expect(await findProjectRoot(shallow)).toBe(root);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test('returns undefined when no package.json exists on the way up', async () => {
+    const isolated = await mkdtemp(join(tmpdir(), 'webdiag-no-root-'));
+
+    try {
+      expect(await findProjectRoot(isolated)).toBeUndefined();
+    } finally {
+      await rm(isolated, { recursive: true, force: true });
+    }
+  });
+});
+
 describe('runTestssl', () => {
   /** Answers like `testssl.sh`: writes the JSON file the run reads back. */
   function recordingRunner(): CommandRunner & { argv: string[] } {

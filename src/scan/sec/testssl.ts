@@ -20,6 +20,7 @@
  *    waited on.
  */
 import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
 import type { RawObservation } from '../raw.ts';
 import { type CommandRunner, runCommand } from './curl.ts';
 
@@ -71,6 +72,32 @@ function exists(path: string): Promise<boolean> {
 }
 
 /**
+ * Walks up from `startDir` looking for the `package.json` that marks the
+ * project root. Needed because this module's own depth under that root
+ * differs between `bun run ./src/cli.ts` (`src/scan/sec/`, three levels down)
+ * and the bundled `dist/cli.js` (`dist/`, one level down): a fixed `../../..`
+ * finds `vendor/` in the former and walks out of the repository in the
+ * latter, silently degrading the probe on every build a user actually ships.
+ */
+export async function findProjectRoot(startDir: string): Promise<string | undefined> {
+  let dir = startDir;
+
+  for (;;) {
+    if (await exists(join(dir, 'package.json'))) {
+      return dir;
+    }
+
+    const parent = dirname(dir);
+
+    if (parent === dir) {
+      return undefined;
+    }
+
+    dir = parent;
+  }
+}
+
+/**
  * Finds `testssl.sh`, in the order an operator would expect: an explicit
  * override, then whatever is on `PATH`, then the copy `bun run install:testssl`
  * drops in `vendor/`.
@@ -88,7 +115,13 @@ export async function locateTestssl(): Promise<string | undefined> {
     return onPath;
   }
 
-  const vendored = `${import.meta.dir}/../../../vendor/testssl.sh/testssl.sh`;
+  const root = await findProjectRoot(import.meta.dir);
+
+  if (root === undefined) {
+    return undefined;
+  }
+
+  const vendored = join(root, 'vendor', 'testssl.sh', 'testssl.sh');
 
   return (await exists(vendored)) ? vendored : undefined;
 }
