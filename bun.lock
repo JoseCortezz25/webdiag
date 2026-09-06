@@ -4,6 +4,9 @@
   "workspaces": {
     "": {
       "name": "webdiag",
+      "dependencies": {
+        "zod": "4.5.4",
+      },
       "devDependencies": {
         "@biomejs/biome": "2.5.12",
         "@types/bun": "1.3.14",
@@ -39,5 +42,7 @@
     "typescript": ["typescript@5.9.3", "https://omc-075263945110.d.codeartifact.us-east-1.amazonaws.com/npm/omc-design-system/typescript/-/typescript-5.9.3.tgz", { "bin": { "tsc": "bin/tsc", "tsserver": "bin/tsserver" } }, "sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw=="],
 
     "undici-types": ["undici-types@8.3.0", "https://omc-075263945110.d.codeartifact.us-east-1.amazonaws.com/npm/omc-design-system/undici-types/-/undici-types-8.3.0.tgz", {}, "sha512-j375ScV60dom+YkPFIfTLcOiPxkN/buHz5GobjLhixFuANaNs3C9l4GmrWqejgXWJ7BbJcFYpTEUkS1Ge8bpZQ=="],
+
+    "zod": ["zod@4.5.4", "https://omc-075263945110.d.codeartifact.us-east-1.amazonaws.com/npm/omc-design-system/zod/-/zod-4.5.4.tgz", {}, "sha512-sC95tT5iHHH9gtpj6A81kh+NEaRAUFN+qlUPDUbRfOMvNf5QCBqsb3WgvnpVtK5Y+4UfA6KqufotuTvMGiTlsA=="],
   }
 }

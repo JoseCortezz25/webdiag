@@ -1,0 +1,101 @@
+/**
+ * Frozen semantic fingerprints for catalogue v1.0.0.
+ *
+ * Generated once, then treated as an append-only ledger. Each value pins what an
+ * ID means, so `contract-lock.test.ts` can tell the two legitimate kinds of
+ * change apart from the one illegitimate kind:
+ *
+ *  - Adding a new ID: add its fingerprint here. Additive, safe.
+ *  - Retiring an ID: keep its fingerprint here and mark the entry deprecated.
+ *  - Redefining an existing ID: not allowed. Do not update the value to make the
+ *    test pass — that is the exact failure the lock exists to catch. Publish a
+ *    new ID instead and let the old one go deprecated.
+ *
+ * See `fingerprint.ts` for what is hashed.
+ */
+
+/** ID to fingerprint, as published under catalog_version 1.0.0. */
+export const CONTRACT_LOCK: Readonly<Record<string, string>> = {
+  'PERF-LCP-POOR': '0d7ee27603bcebac',
+  'PERF-CLS-POOR': '3928cb1baed1beca',
+  'PERF-TBT-HIGH': 'be3436b8ef95e766',
+  'PERF-TTFB-SLOW': 'b697078fd77c2a4a',
+  'PERF-FIELD-UNAVAILABLE': '359b39e6e3d86ac9',
+  'PERF-IMG-UNOPTIMIZED': 'f290e0d352f91fe9',
+  'PERF-RENDER-BLOCKING': '2b02556da98f791a',
+  'PERF-JS-UNUSED': '437ec69378afa5ef',
+  'PERF-BUNDLE-OVERSIZED': 'de7c9e10ba84358e',
+  'PERF-NO-CACHE-POLICY': 'a255eec217549419',
+  'PERF-LAB-VARIANCE-HIGH': 'a1e4cc1dc5f0722c',
+  'A11Y-CONTRAST-INSUFFICIENT': '384ae970afce9d59',
+  'A11Y-IMG-ALT-MISSING': 'cc8a3aa39779ea89',
+  'A11Y-FORM-LABEL-MISSING': '294228ed67259fcf',
+  'A11Y-BUTTON-NAME-MISSING': '615775bd9986c66e',
+  'A11Y-LANG-MISSING': '4c7cab37193c3db0',
+  'A11Y-HEADING-ORDER': 'fba803ad22ac4ee2',
+  'A11Y-LANDMARKS-MISSING': '6e8e52cb9fe48f95',
+  'A11Y-ARIA-INVALID': '581d5db8e26d3855',
+  'A11Y-KEYBOARD-TRAP': '15cbe2315022f7ca',
+  'A11Y-FOCUS-NOT-VISIBLE': 'd733d7972cee43dd',
+  'A11Y-FOCUS-ORDER-ILLOGICAL': '6e460f808312c608',
+  'A11Y-ALT-NOT-DESCRIPTIVE': 'deebc490611b5902',
+  'A11Y-MANUAL-REVIEW-PENDING': '3ac8d1815aa94df1',
+  'SEO-NOINDEX-UNINTENDED': '86efa0c03e142c7e',
+  'SEO-ROBOTS-BLOCKS-ALL': '4a85f10172f27f16',
+  'SEO-ROBOTS-INVALID': '95a6355d9b4e695c',
+  'SEO-ROBOTS-BLOCKS-ASSETS': '86859b7d794cea7d',
+  'SEO-STATUS-ERROR': '645563efbb02654c',
+  'SEO-REDIRECT-CHAIN': '21603f84e67e8465',
+  'SEO-REDIRECT-LOOP': 'd09f741dc17b57ea',
+  'SEO-CANONICAL-MISSING': 'c516d0229fd36536',
+  'SEO-CANONICAL-CONFLICT': 'ac996c71cf9e87c5',
+  'SEO-CANONICAL-CHAIN': 'c0c24cb4107c5e82',
+  'SEO-SITEMAP-MISSING': '4436fbee3dd5254a',
+  'SEO-SITEMAP-INVALID': 'b4d811759b7c8742',
+  'SEO-SITEMAP-LIMITS-EXCEEDED': '247dc7e7ad23dcf6',
+  'SEO-SITEMAP-DIRTY-URLS': 'cbdfb04d8edcb0f9',
+  'SEO-TITLE-MISSING': 'a5fcd7abacf89b06',
+  'SEO-TITLE-DUPLICATE': '89cbe69ab9854c49',
+  'SEO-META-DESC-MISSING': '7db335dd8d31977c',
+  'SEO-META-DESC-DUPLICATE': 'e1859d8311fae198',
+  'SEO-H1-MISSING': '27dd5c44207b3855',
+  'SEO-HREFLANG-INVALID': 'bc72d498c14be97e',
+  'SEO-HREFLANG-NO-RETURN': 'a1703fd1a5928cc5',
+  'SEO-HREFLANG-CANONICAL-CONFLICT': 'a454284d01c2770d',
+  'SEO-JSONLD-INVALID': '5b86b0e53fdf7bd5',
+  'SEO-JSONLD-INCOMPLETE': '76a16a315be2b902',
+  'SEO-CSR-CONTENT-INVISIBLE': '862af13f168694c4',
+  'SEO-LINKS-NOT-CRAWLABLE': '6fa6eeca01c688f3',
+  'SEO-LINKS-BROKEN': 'e54d773d09c83aec',
+  'SEO-MIXED-CONTENT': 'addf3bc6a39a4357',
+  'SEO-VIEWPORT-MISSING': 'e0295c8da4d38af1',
+  'SEO-ORPHAN-PAGES': 'edf6951d513a2038',
+  'SEO-CONTENT-NEAR-DUPLICATE': 'f8020b641c5440cd',
+  'DEPS-VULN-KEV': 'cf310d6d3aa75ce5',
+  'DEPS-VULN-CRITICAL': '7aced24895cbbaab',
+  'DEPS-VULN-HIGH': '885a735586d60519',
+  'DEPS-VULN-MEDIUM': 'e7ba0462b8896c90',
+  'DEPS-VULN-HIGH-EPSS': '01cd662c28d16b23',
+  'DEPS-LIB-OUTDATED': '87bc58adf90433ff',
+  'DEPS-LIB-DEPRECATED': 'e7dd2a60795a4887',
+  'DEPS-LIB-UNMAINTAINED': '6e4c9006550a1872',
+  'DEPS-RUNTIME-EOL': '802ce2b6a2921d60',
+  'DEPS-SOURCEMAP-EXPOSED': '3b357618e2b54d83',
+  'DEPS-VERSION-UNDETERMINED': '50239bed2739180a',
+  'SEC-CSP-MISSING': '3fb4995e0bbeecfe',
+  'SEC-CSP-UNSAFE': '8b56245fedc634f3',
+  'SEC-HSTS-MISSING': '9873f5e964eb0d23',
+  'SEC-XFO-MISSING': '1e22ab3da5b0cc23',
+  'SEC-TLS-WEAK': '2ac1628a17e177b8',
+  'SEC-TLS-EXPIRING': 'db8a6e9c5afdea6e',
+  'SEC-TLS-EXPIRED': '1c39f0277aa259c4',
+  'SEC-COOKIE-INSECURE': '366d2ede0b2a4b5b',
+  'SEC-SERVER-VERSION-DISCLOSED': 'b066252cd42c1876',
+  'SEC-COOKIES-PRE-CONSENT': 'fd10052a64064476',
+  'AGENT-NO-JS-CONTENT-EMPTY': 'c28ab8a4bbc24d09',
+  'AGENT-AI-BOTS-BLOCKED': '541e2afa338b7c8a',
+  'AGENT-STRUCTURED-DATA-MISSING': 'c6b8987d6ee3df05',
+  'AGENT-LLMSTXT-MISSING': '568659b439f773fe',
+  'AGENT-WELLKNOWN-MISSING': '0d858c17097d39fc',
+  'AGENT-SEMANTICS-POOR': 'a922fe4f8befff38',
+};
