@@ -1,0 +1,687 @@
+{
+  "schema": "webdiag.summary/1",
+  "catalogVersion": "1.0.0",
+  "target": {
+    "url": "https://tienda-ejemplo.com",
+    "mode": "quick",
+    "pages": 1
+  },
+  "scoring": {
+    "model": "independent-per-axis",
+    "maxAxisScore": 100,
+    "composite": null
+  },
+  "axesEvaluated": [
+    "PERF",
+    "A11Y",
+    "SEO",
+    "DEPS",
+    "SEC",
+    "AGENT"
+  ],
+  "axesSkipped": [],
+  "coverPage": [
+    {
+      "id": "SEO-NOINDEX-UNINTENDED",
+      "title": "La home esta marcada como no indexable",
+      "severity": "critical",
+      "confidence": "high",
+      "count": 1,
+      "affected": [
+        "/"
+      ],
+      "remediation": "Eliminar el noindex de produccion y solicitar reindexacion.",
+      "evidence": {
+        "header": "x-robots-tag: noindex",
+        "meta": "<meta name=\"robots\" content=\"noindex\">"
+      },
+      "source": "probe:seo",
+      "tool": "webdiag-stub@0.0.0-fixture",
+      "ownerAxis": "SEO",
+      "blocking": true
+    }
+  ],
+  "lowConfidence": [
+    {
+      "id": "DEPS-VULN-HIGH",
+      "severity": "high",
+      "confidence": "low",
+      "count": 1,
+      "affected": [
+        "/assets/vendor.js"
+      ],
+      "remediation": "Actualizar jQuery a 3.5.0 o superior.",
+      "evidence": {
+        "library": "jquery",
+        "detected": "3.4.1",
+        "cve": "CVE-2020-11022"
+      },
+      "source": "probe:deps",
+      "tool": "webdiag-stub@0.0.0-fixture",
+      "ownerAxis": "DEPS",
+      "blocking": false
+    }
+  ],
+  "rejected": [],
+  "byAxis": [
+    {
+      "axis": "PERF",
+      "score": 75,
+      "maxScore": 100,
+      "zeroed": false,
+      "zeroedBy": [],
+      "probe": {
+        "axis": "PERF",
+        "tool": "webdiag-stub@0.0.0-fixture",
+        "status": "ok"
+      },
+      "counts": {
+        "scored": 4,
+        "lowConfidence": 0,
+        "mentions": 0,
+        "bySeverity": {
+          "critical": 0,
+          "high": 1,
+          "medium": 2,
+          "low": 0,
+          "info": 1
+        }
+      },
+      "deductions": [
+        {
+          "id": "PERF-LCP-POOR",
+          "points": 15
+        },
+        {
+          "id": "PERF-IMG-UNOPTIMIZED",
+          "points": 5
+        },
+        {
+          "id": "PERF-TBT-HIGH",
+          "points": 5
+        }
+      ],
+      "findings": [
+        {
+          "id": "PERF-LCP-POOR",
+          "title": "El contenido principal tarda 4.1s en aparecer",
+          "severity": "high",
+          "confidence": "high",
+          "count": 1,
+          "affected": [
+            "/"
+          ],
+          "remediation": "Precargar la imagen LCP y servirla en AVIF/WebP dimensionada al viewport.",
+          "evidence": {
+            "lcp_ms": 4120,
+            "threshold_ms": 2500,
+            "element": "img.hero"
+          },
+          "source": "probe:perf",
+          "tool": "webdiag-stub@0.0.0-fixture",
+          "ownerAxis": "PERF",
+          "blocking": false
+        },
+        {
+          "id": "PERF-IMG-UNOPTIMIZED",
+          "severity": "medium",
+          "confidence": "high",
+          "count": 12,
+          "affected": [
+            "/",
+            "/servicios",
+            "/contacto"
+          ],
+          "remediation": "Convertir a AVIF/WebP y declarar width/height en cada imagen.",
+          "evidence": {
+            "images": 12,
+            "wasted_kb": 1840,
+            "formats": [
+              "jpeg",
+              "png"
+            ]
+          },
+          "source": "probe:perf",
+          "tool": "webdiag-stub@0.0.0-fixture",
+          "ownerAxis": "PERF",
+          "blocking": false
+        },
+        {
+          "id": "PERF-TBT-HIGH",
+          "severity": "medium",
+          "confidence": "medium",
+          "count": 1,
+          "affected": [
+            "/"
+          ],
+          "remediation": "Dividir el bundle principal y diferir el JS de terceros.",
+          "evidence": {
+            "tbt_ms": 890,
+            "threshold_ms": 200,
+            "note": "proxy de INP, no es INP"
+          },
+          "source": "probe:perf",
+          "tool": "webdiag-stub@0.0.0-fixture",
+          "ownerAxis": "PERF",
+          "blocking": false
+        },
+        {
+          "id": "PERF-FIELD-UNAVAILABLE",
+          "severity": "info",
+          "confidence": "high",
+          "count": 1,
+          "affected": [
+            "/"
+          ],
+          "remediation": "Ninguna: es una limitacion de la medicion. Los numeros de este eje son de laboratorio.",
+          "evidence": {
+            "source": "CrUX",
+            "reason": "origen sin trafico suficiente"
+          },
+          "source": "probe:perf",
+          "tool": "webdiag-stub@0.0.0-fixture",
+          "ownerAxis": "PERF",
+          "blocking": false
+        }
+      ],
+      "lowConfidence": [],
+      "mentions": []
+    },
+    {
+      "axis": "A11Y",
+      "score": 65,
+      "maxScore": 100,
+      "zeroed": false,
+      "zeroedBy": [],
+      "probe": {
+        "axis": "A11Y",
+        "tool": "webdiag-stub@0.0.0-fixture",
+        "status": "ok"
+      },
+      "counts": {
+        "scored": 4,
+        "lowConfidence": 0,
+        "mentions": 0,
+        "bySeverity": {
+          "critical": 0,
+          "high": 2,
+          "medium": 1,
+          "low": 0,
+          "info": 1
+        }
+      },
+      "deductions": [
+        {
+          "id": "A11Y-CONTRAST-INSUFFICIENT",
+          "points": 15
+        },
+        {
+          "id": "A11Y-IMG-ALT-MISSING",
+          "points": 15
+        },
+        {
+          "id": "A11Y-LANDMARKS-MISSING",
+          "points": 5
+        }
+      ],
+      "findings": [
+        {
+          "id": "A11Y-CONTRAST-INSUFFICIENT",
+          "severity": "high",
+          "confidence": "high",
+          "count": 7,
+          "affected": [
+            "/",
+            "/contacto"
+          ],
+          "remediation": "Subir el contraste del texto de navegacion a 4.5:1 como minimo.",
+          "evidence": {
+            "ratio": 2.8,
+            "required": 4.5,
+            "selector": ".nav a"
+          },
+          "source": "probe:a11y",
+          "tool": "webdiag-stub@0.0.0-fixture",
+          "ownerAxis": "A11Y",
+          "blocking": false
+        },
+        {
+          "id": "A11Y-IMG-ALT-MISSING",
+          "severity": "high",
+          "confidence": "high",
+          "count": 5,
+          "affected": [
+            "/",
+            "/servicios"
+          ],
+          "remediation": "Anadir alt descriptivo, o alt=\"\" si la imagen es decorativa.",
+          "evidence": {
+            "images_without_alt": 5
+          },
+          "source": "probe:a11y",
+          "tool": "webdiag-stub@0.0.0-fixture",
+          "ownerAxis": "A11Y",
+          "blocking": false
+        },
+        {
+          "id": "A11Y-LANDMARKS-MISSING",
+          "severity": "medium",
+          "confidence": "medium",
+          "count": 1,
+          "affected": [
+            "/"
+          ],
+          "remediation": "Envolver el contenido en <main>, <nav> y <footer>.",
+          "evidence": {
+            "landmarks": [],
+            "expected": [
+              "main",
+              "nav",
+              "footer"
+            ]
+          },
+          "source": "probe:a11y",
+          "tool": "webdiag-stub@0.0.0-fixture",
+          "ownerAxis": "A11Y",
+          "blocking": false
+        },
+        {
+          "id": "A11Y-MANUAL-REVIEW-PENDING",
+          "severity": "info",
+          "confidence": "high",
+          "count": 1,
+          "affected": [
+            "/"
+          ],
+          "remediation": "Complementar con revision humana: cerca del 43% de los criterios WCAG exige juicio.",
+          "evidence": {
+            "automated_coverage": "~57%",
+            "standard": "WCAG 2.2 AA"
+          },
+          "source": "probe:a11y",
+          "tool": "webdiag-stub@0.0.0-fixture",
+          "ownerAxis": "A11Y",
+          "blocking": false
+        }
+      ],
+      "lowConfidence": [],
+      "mentions": []
+    },
+    {
+      "axis": "SEO",
+      "score": 0,
+      "maxScore": 100,
+      "zeroed": true,
+      "zeroedBy": [
+        "SEO-NOINDEX-UNINTENDED"
+      ],
+      "probe": {
+        "axis": "SEO",
+        "tool": "webdiag-stub@0.0.0-fixture",
+        "status": "ok"
+      },
+      "counts": {
+        "scored": 3,
+        "lowConfidence": 0,
+        "mentions": 0,
+        "bySeverity": {
+          "critical": 1,
+          "high": 0,
+          "medium": 1,
+          "low": 1,
+          "info": 0
+        }
+      },
+      "deductions": [],
+      "findings": [
+        {
+          "id": "SEO-NOINDEX-UNINTENDED",
+          "title": "La home esta marcada como no indexable",
+          "severity": "critical",
+          "confidence": "high",
+          "count": 1,
+          "affected": [
+            "/"
+          ],
+          "remediation": "Eliminar el noindex de produccion y solicitar reindexacion.",
+          "evidence": {
+            "header": "x-robots-tag: noindex",
+            "meta": "<meta name=\"robots\" content=\"noindex\">"
+          },
+          "source": "probe:seo",
+          "tool": "webdiag-stub@0.0.0-fixture",
+          "ownerAxis": "SEO",
+          "blocking": true
+        },
+        {
+          "id": "SEO-H1-MISSING",
+          "severity": "medium",
+          "confidence": "high",
+          "count": 1,
+          "affected": [
+            "/servicios"
+          ],
+          "remediation": "Anadir un unico <h1> que describa la pagina.",
+          "evidence": {
+            "h1_count": 0
+          },
+          "source": "probe:seo",
+          "tool": "webdiag-stub@0.0.0-fixture",
+          "ownerAxis": "SEO",
+          "blocking": false
+        },
+        {
+          "id": "SEO-META-DESC-MISSING",
+          "severity": "low",
+          "confidence": "medium",
+          "count": 3,
+          "affected": [
+            "/",
+            "/servicios",
+            "/contacto"
+          ],
+          "remediation": "Redactar una meta description unica por pagina.",
+          "evidence": {
+            "pages_without_description": 3
+          },
+          "source": "probe:seo",
+          "tool": "webdiag-stub@0.0.0-fixture",
+          "ownerAxis": "SEO",
+          "blocking": false
+        }
+      ],
+      "lowConfidence": [],
+      "mentions": []
+    },
+    {
+      "axis": "DEPS",
+      "score": 95,
+      "maxScore": 100,
+      "zeroed": false,
+      "zeroedBy": [],
+      "probe": {
+        "axis": "DEPS",
+        "tool": "webdiag-stub@0.0.0-fixture",
+        "status": "ok"
+      },
+      "counts": {
+        "scored": 2,
+        "lowConfidence": 1,
+        "mentions": 0,
+        "bySeverity": {
+          "critical": 0,
+          "high": 0,
+          "medium": 1,
+          "low": 0,
+          "info": 1
+        }
+      },
+      "deductions": [
+        {
+          "id": "DEPS-SOURCEMAP-EXPOSED",
+          "points": 5
+        }
+      ],
+      "findings": [
+        {
+          "id": "DEPS-SOURCEMAP-EXPOSED",
+          "severity": "medium",
+          "confidence": "high",
+          "count": 1,
+          "affected": [
+            "/assets/app.js.map"
+          ],
+          "remediation": "No publicar sourcemaps en produccion o restringir su acceso.",
+          "evidence": {
+            "url": "/assets/app.js.map",
+            "status": 200
+          },
+          "source": "probe:deps",
+          "tool": "webdiag-stub@0.0.0-fixture",
+          "ownerAxis": "DEPS",
+          "blocking": false
+        },
+        {
+          "id": "DEPS-VERSION-UNDETERMINED",
+          "severity": "info",
+          "confidence": "high",
+          "count": 4,
+          "affected": [
+            "/assets/vendor.js"
+          ],
+          "remediation": "Correr el diagnostico en modo white-box con el repositorio para leer los lockfiles.",
+          "evidence": {
+            "undetermined": 4,
+            "reason": "bundle minificado sin banner de version"
+          },
+          "source": "probe:deps",
+          "tool": "webdiag-stub@0.0.0-fixture",
+          "ownerAxis": "DEPS",
+          "blocking": false
+        }
+      ],
+      "lowConfidence": [
+        {
+          "id": "DEPS-VULN-HIGH",
+          "severity": "high",
+          "confidence": "low",
+          "count": 1,
+          "affected": [
+            "/assets/vendor.js"
+          ],
+          "remediation": "Actualizar jQuery a 3.5.0 o superior.",
+          "evidence": {
+            "library": "jquery",
+            "detected": "3.4.1",
+            "cve": "CVE-2020-11022"
+          },
+          "source": "probe:deps",
+          "tool": "webdiag-stub@0.0.0-fixture",
+          "ownerAxis": "DEPS",
+          "blocking": false
+        }
+      ],
+      "mentions": []
+    },
+    {
+      "axis": "SEC",
+      "score": 80,
+      "maxScore": 100,
+      "zeroed": false,
+      "zeroedBy": [],
+      "probe": {
+        "axis": "SEC",
+        "tool": "webdiag-stub@0.0.0-fixture",
+        "status": "ok"
+      },
+      "counts": {
+        "scored": 2,
+        "lowConfidence": 0,
+        "mentions": 1,
+        "bySeverity": {
+          "critical": 0,
+          "high": 1,
+          "medium": 1,
+          "low": 0,
+          "info": 0
+        }
+      },
+      "deductions": [
+        {
+          "id": "SEC-CSP-MISSING",
+          "points": 15
+        },
+        {
+          "id": "SEC-HSTS-MISSING",
+          "points": 5
+        }
+      ],
+      "findings": [
+        {
+          "id": "SEC-CSP-MISSING",
+          "severity": "high",
+          "confidence": "high",
+          "count": 1,
+          "affected": [
+            "/"
+          ],
+          "remediation": "Publicar una CSP en modo report-only y endurecerla despues.",
+          "evidence": {
+            "header": "content-security-policy",
+            "present": false
+          },
+          "source": "probe:sec",
+          "tool": "webdiag-stub@0.0.0-fixture",
+          "ownerAxis": "SEC",
+          "blocking": false
+        },
+        {
+          "id": "SEC-HSTS-MISSING",
+          "severity": "medium",
+          "confidence": "high",
+          "count": 1,
+          "affected": [
+            "/"
+          ],
+          "remediation": "Anadir Strict-Transport-Security con max-age de al menos 6 meses.",
+          "evidence": {
+            "header": "strict-transport-security",
+            "present": false
+          },
+          "source": "probe:sec",
+          "tool": "webdiag-stub@0.0.0-fixture",
+          "ownerAxis": "SEC",
+          "blocking": false
+        }
+      ],
+      "lowConfidence": [],
+      "mentions": [
+        {
+          "id": "DEPS-SOURCEMAP-EXPOSED",
+          "severity": "medium",
+          "confidence": "high",
+          "count": 1,
+          "affected": [
+            "/assets/app.js.map"
+          ],
+          "remediation": "No publicar sourcemaps en produccion o restringir su acceso.",
+          "evidence": {
+            "url": "/assets/app.js.map",
+            "status": 200
+          },
+          "source": "probe:deps",
+          "tool": "webdiag-stub@0.0.0-fixture",
+          "ownerAxis": "DEPS",
+          "blocking": false
+        }
+      ]
+    },
+    {
+      "axis": "AGENT",
+      "score": 98,
+      "maxScore": 100,
+      "zeroed": false,
+      "zeroedBy": [],
+      "probe": {
+        "axis": "AGENT",
+        "tool": "webdiag-stub@0.0.0-fixture",
+        "status": "ok"
+      },
+      "counts": {
+        "scored": 2,
+        "lowConfidence": 0,
+        "mentions": 1,
+        "bySeverity": {
+          "critical": 0,
+          "high": 0,
+          "medium": 0,
+          "low": 2,
+          "info": 0
+        }
+      },
+      "deductions": [
+        {
+          "id": "AGENT-LLMSTXT-MISSING",
+          "points": 1
+        },
+        {
+          "id": "AGENT-STRUCTURED-DATA-MISSING",
+          "points": 1
+        }
+      ],
+      "findings": [
+        {
+          "id": "AGENT-LLMSTXT-MISSING",
+          "severity": "low",
+          "confidence": "high",
+          "count": 1,
+          "affected": [
+            "/llms.txt"
+          ],
+          "remediation": "Opcional: publicar /llms.txt. Su impacto no esta demostrado y no penaliza otros ejes.",
+          "evidence": {
+            "status": 404,
+            "note": "impacto no probado; Google lo clasifica como mito"
+          },
+          "source": "probe:agent",
+          "tool": "webdiag-stub@0.0.0-fixture",
+          "ownerAxis": "AGENT",
+          "blocking": false
+        },
+        {
+          "id": "AGENT-STRUCTURED-DATA-MISSING",
+          "severity": "low",
+          "confidence": "medium",
+          "count": 1,
+          "affected": [
+            "/"
+          ],
+          "remediation": "Publicar JSON-LD de Organization y de los servicios ofrecidos.",
+          "evidence": {
+            "jsonld_blocks": 0
+          },
+          "source": "probe:agent",
+          "tool": "webdiag-stub@0.0.0-fixture",
+          "ownerAxis": "AGENT",
+          "blocking": false
+        }
+      ],
+      "lowConfidence": [],
+      "mentions": [
+        {
+          "id": "A11Y-LANDMARKS-MISSING",
+          "severity": "medium",
+          "confidence": "medium",
+          "count": 1,
+          "affected": [
+            "/"
+          ],
+          "remediation": "Envolver el contenido en <main>, <nav> y <footer>.",
+          "evidence": {
+            "landmarks": [],
+            "expected": [
+              "main",
+              "nav",
+              "footer"
+            ]
+          },
+          "source": "probe:a11y",
+          "tool": "webdiag-stub@0.0.0-fixture",
+          "ownerAxis": "A11Y",
+          "blocking": false
+        }
+      ]
+    }
+  ],
+  "disclaimers": [
+    "Cada eje se evalua de forma independiente. No existe un puntaje unico que combine los seis.",
+    "Un diagnostico automatizado no sustituye una auditoria formal: cerca del 43% de los criterios WCAG exige revision humana.",
+    "Este informe no emite juicios legales de cumplimiento (EAA, ADA) ni incluye escaneo activo de seguridad.",
+    "Los hallazgos con confianza baja se listan aparte y no afectan ningun puntaje."
+  ],
+  "totals": {
+    "findings": 18,
+    "scored": 17,
+    "lowConfidence": 1
+  }
+}
