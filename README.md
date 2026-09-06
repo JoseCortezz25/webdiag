@@ -106,6 +106,7 @@ webdiag scan <url> [--repo PATH] [--mode quick|deep] [--axes ...] [--pages N] [-
 | `--axes` | all six | Comma-separated subset of `PERF,A11Y,SEO,DEPS,SEC,AGENT` |
 | `--pages` | `1` quick / `5` deep | Pages a deep run may sample |
 | `--repo` | none | Path to the checkout, for white-box checks |
+| `--fail-on` | none | CI budget: exit `4` if a finding meets this severity or worse, or is `blocking` |
 
 Writing into `DIR/`:
 
@@ -130,6 +131,7 @@ never deducted.
 | `1`  | Usage error (unknown command, missing argument) |
 | `2`  | The command exists in the interface but is not implemented yet |
 | `3`  | The invocation was valid but the run could not produce its artifacts |
+| `4`  | The run produced artifacts, but a `--fail-on` budget was exceeded |
 
 ## Scripts
 
@@ -253,6 +255,33 @@ Design rules the code enforces rather than documents:
 [`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs on every push and pull
 request: `bun install --frozen-lockfile`, then lint, typecheck, test, build, and a smoke
 check of the built binary. Any failure blocks the PR.
+
+### CI budgets
+
+[`.github/workflows/webdiag.yml`](.github/workflows/webdiag.yml) is a reusable workflow
+that fails the build when a scan hits a severity budget. It does nothing on its own;
+call it from another workflow with `uses:`:
+
+```yaml
+jobs:
+  webdiag-budget:
+    uses: JoseCortezz25/webdiag/.github/workflows/webdiag.yml@main
+    with:
+      url: https://example.com
+      mode: quick
+      axes: DEPS
+      fail-on: high
+```
+
+| Input     | Default               | Meaning |
+|-----------|-----------------------|---------|
+| `url`     | `https://example.com` | Target URL webdiag records as the scan target (only fetched by non-white-box axes) |
+| `mode`    | `quick`                | `quick` or `deep` |
+| `axes`    | `DEPS`                 | Comma-separated subset of `PERF,A11Y,SEO,DEPS,SEC,AGENT` |
+| `fail-on` | `high`                 | Severity budget: `critical`, `high`, `medium`, `low` or `info`. A finding at or above this fails the build; a blocking finding always does |
+
+The workflow always scans the calling repository in white-box mode (`--repo`) and
+uploads the report as a build artifact.
 
 ## Conventions
 

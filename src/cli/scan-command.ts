@@ -7,6 +7,7 @@
  */
 import { parseScanArgs, runScan, type ScanOptions } from '../scan/index.ts';
 import { PROGRAM_NAME } from '../version.ts';
+import { evaluateBudget } from './budget.ts';
 import type { Command } from './commands.ts';
 import { EXIT, type ExitCode } from './exit-codes.ts';
 import type { CliOutput } from './run.ts';
@@ -29,7 +30,7 @@ export async function runScanCommand(
     return EXIT.USAGE;
   }
 
-  const { request } = parsed;
+  const { request, failOn } = parsed;
 
   try {
     const result = await runScan(request, options);
@@ -60,6 +61,18 @@ export async function runScanCommand(
       out.stderr(
         `${PROGRAM_NAME}: probe for ${tool.axis} failed: ${tool.error ?? 'unknown error'}`,
       );
+    }
+
+    if (failOn !== undefined) {
+      const violations = evaluateBudget(result.findings, failOn);
+
+      if (violations.length > 0) {
+        out.stderr(`${PROGRAM_NAME}: budget exceeded (--fail-on ${failOn}):`);
+        for (const violation of violations) {
+          out.stderr(`  ${violation.id} (${violation.severity}, ${violation.reason})`);
+        }
+        return EXIT.BUDGET_EXCEEDED;
+      }
     }
 
     return EXIT.OK;

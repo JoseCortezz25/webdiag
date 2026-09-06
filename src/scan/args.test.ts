@@ -80,6 +80,19 @@ describe('parseScanArgs', () => {
     expect(request(['https://example.com', '--pages', '3']).pages).toBe(3);
   });
 
+  test('--fail-on is absent by default: no CI budget applies', () => {
+    const parsed = parseScanArgs(['https://example.com']);
+    if (!parsed.ok) throw new Error('expected a valid invocation');
+    expect(parsed.failOn).toBeUndefined();
+  });
+
+  test('--fail-on sets a severity threshold, separate from the scan request', () => {
+    const parsed = parseScanArgs(['https://example.com', '--fail-on', 'high']);
+    if (!parsed.ok) throw new Error('expected a valid invocation');
+    expect(parsed.failOn).toBe('high');
+    expect(parsed.request).not.toHaveProperty('failOn');
+  });
+
   test.each([
     [[], 'scan requires a URL'],
     [['example.com'], 'is not an http(s) URL'],
@@ -97,6 +110,7 @@ describe('parseScanArgs', () => {
       '--pages must be between 5 and 10 in --mode deep',
     ],
     [['https://a', '--out'], '--out requires a value'],
+    [['https://a', '--fail-on', 'catastrophic'], '--fail-on must be one of'],
     [['https://a', '--nope', 'x'], "unknown option '--nope'"],
   ])('rejects %p', (argv, expected) => {
     expect(error(argv)).toContain(expected);

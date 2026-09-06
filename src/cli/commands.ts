@@ -19,7 +19,7 @@ export const COMMANDS: readonly Command[] = [
   {
     name: 'scan',
     usage:
-      'webdiag scan <url> [--repo PATH] [--mode quick|deep] [--axes ...] [--pages N] [--out DIR]',
+      'webdiag scan <url> [--repo PATH] [--mode quick|deep] [--axes ...] [--pages N] [--out DIR] [--fail-on SEVERITY]',
     summary: 'Run a technical diagnostic over a URL and write the report artifacts.',
     status: 'available',
   },

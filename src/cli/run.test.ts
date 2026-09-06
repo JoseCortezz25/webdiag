@@ -95,6 +95,42 @@ describe('runCli', () => {
     expect(io.out.join('\n')).toContain('/tmp/x/report.html');
   });
 
+  test('scan without --fail-on exits 0 even with a blocking finding in the fixture', async () => {
+    // The stub fixture's SEO-NOINDEX-UNINTENDED is a blocking critical (see
+    // stub-probe.ts). A budget is opt-in, so this must stay green either way.
+    const code = await runCli(['scan', 'https://example.com', '--out', '/tmp/x'], io, {
+      writer: memoryWriter(),
+      probes: stubProbes(),
+    });
+
+    expect(code).toBe(EXIT.OK);
+  });
+
+  test('--fail-on fails the build on the fixture blocking finding', async () => {
+    const code = await runCli(
+      ['scan', 'https://example.com', '--out', '/tmp/x', '--fail-on', 'critical'],
+      io,
+      { writer: memoryWriter(), probes: stubProbes() },
+    );
+
+    expect(code).toBe(EXIT.BUDGET_EXCEEDED);
+    expect(io.err.join('\n')).toContain('SEO-NOINDEX-UNINTENDED (critical, blocking)');
+  });
+
+  test('--fail-on above every finding severity still exits 0', async () => {
+    // Nothing in the fixture reaches critical except the blocking finding
+    // already covered above; --fail-on critical without a blocking finding
+    // would pass, so this asserts the threshold itself is respected using a
+    // subset of axes the fixture keeps under `high`.
+    const code = await runCli(
+      ['scan', 'https://example.com', '--out', '/tmp/x', '--axes', 'SEC', '--fail-on', 'critical'],
+      io,
+      { writer: memoryWriter(), probes: stubProbes() },
+    );
+
+    expect(code).toBe(EXIT.OK);
+  });
+
   test('rejects a scan invocation without a URL', async () => {
     const code = await runCli(['scan'], io, { writer: memoryWriter(), probes: stubProbes() });
 

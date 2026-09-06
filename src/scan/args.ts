@@ -6,8 +6,8 @@
  * the accepted values, because "invalid argument" costs the operator a trip to
  * `--help` that the error message could have saved.
  */
-import type { Axis, Mode } from '../catalog/index.ts';
-import { AXES } from '../catalog/index.ts';
+import type { Axis, Mode, Severity } from '../catalog/index.ts';
+import { AXES, SEVERITIES } from '../catalog/index.ts';
 import type { ScanRequest } from './orchestrator.ts';
 
 /** Modes reachable from the CLI. `whitebox` is implied by `--repo`, not asked for. */
@@ -27,7 +27,12 @@ const DEFAULT_PAGES: Readonly<Record<string, number>> = { quick: 1, deep: 8 };
  */
 const DEEP_PAGE_RANGE = { min: 5, max: 10 } as const;
 
-export type ParsedScan = { readonly ok: true; readonly request: ScanRequest };
+export type ParsedScan = {
+  readonly ok: true;
+  readonly request: ScanRequest;
+  /** Unset means no CI budget: `runScan` always exits clean on its own. */
+  readonly failOn?: Severity;
+};
 export type ParseError = { readonly ok: false; readonly error: string };
 export type ScanArgsResult = ParsedScan | ParseError;
 
@@ -63,6 +68,7 @@ export function parseScanArgs(argv: readonly string[]): ScanArgsResult {
   let repo: string | undefined;
   let axes: readonly Axis[] = AXES;
   let pages: number | undefined;
+  let failOn: Severity | undefined;
 
   for (let index = 0; index < argv.length; index += 1) {
     const token = argv[index];
@@ -118,6 +124,14 @@ export function parseScanArgs(argv: readonly string[]): ScanArgsResult {
         pages = parsed;
         break;
       }
+      case '--fail-on': {
+        const candidate = SEVERITIES.find((known) => known === value);
+        if (candidate === undefined) {
+          return fail(`--fail-on must be one of: ${SEVERITIES.join(', ')}`);
+        }
+        failOn = candidate;
+        break;
+      }
       default:
         return fail(`unknown option '${token}'`);
     }
@@ -151,5 +165,6 @@ export function parseScanArgs(argv: readonly string[]): ScanArgsResult {
       out,
       repo,
     },
+    ...(failOn === undefined ? {} : { failOn }),
   };
 }
