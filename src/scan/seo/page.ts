@@ -63,14 +63,18 @@ const MOUNT_IDS: readonly string[] = ['root', 'app', '__next', '__nuxt', '___gat
  * crawler would find in the bytes, and `<script>` / `<style>` content is not
  * prose no matter how the tree is shaped.
  */
-export function countBodyWords(html: string): number {
-  const text = html
+export function bodyText(html: string): string {
+  return html
     .replace(/<!--[\s\S]*?-->/g, ' ')
     .replace(/<(script|style|template|noscript)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, ' ')
     .replace(/<[^>]+>/g, ' ')
     .replace(/&[a-z#0-9]+;/gi, ' ');
+}
 
-  return text.split(/\s+/).filter((word) => word.length > 0).length;
+export function countBodyWords(html: string): number {
+  return bodyText(html)
+    .split(/\s+/)
+    .filter((word) => word.length > 0).length;
 }
 
 /** Returns the id of an empty framework mount node, when the document has one. */

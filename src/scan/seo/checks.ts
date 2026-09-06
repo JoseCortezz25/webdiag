@@ -17,6 +17,7 @@
  *    heuristic like "this page looks client-rendered" from zeroing an axis on a
  *    guess.
  */
+import type { Confidence } from '../../catalog/index.ts';
 import type { RawObservation } from '../raw.ts';
 import type { SeoAnalysis } from './analysis.ts';
 import { metaContent, type PageDocument, resolveUrl } from './page.ts';
@@ -33,6 +34,9 @@ const CSR_WORD_CERTAIN = 25;
 
 /** Kept short so `findings.json` stays readable when a page has hundreds. */
 const MAX_LISTED = 20;
+
+/** Lower is more certain. Used when the same ID arrives from two pages at once. */
+const CONFIDENCE_RANK: Readonly<Record<Confidence, number>> = { high: 0, medium: 1, low: 2 };
 
 function pathFor(url: string): string {
   try {
@@ -869,6 +873,95 @@ export function linkObservations(analysis: SeoAnalysis): readonly RawObservation
 // ---------------------------------------------------------------------------
 // Composition
 // ---------------------------------------------------------------------------
+
+/**
+ * The checks that are about *one page*, for the `deep` crawl.
+ *
+ * Three families are deliberately absent. `sitemapObservations` and
+ * `linkObservations` describe the site, not the page, and running them once per
+ * sampled page would turn one missing sitemap into `count: 8`. `robotsObservations`
+ * is the same argument in a less obvious costume: `SEO-ROBOTS-INVALID` and
+ * `SEO-ROBOTS-BLOCKS-ALL` are properties of a single robots.txt file, and a
+ * finding that says "your robots.txt blocks the site, 8 times" is a report that
+ * has stopped meaning anything. The seed page still runs all of them through
+ * `toObservations`, so nothing is lost — it is only not repeated.
+ */
+export function pageObservations(analysis: SeoAnalysis): readonly RawObservation[] {
+  const transport = statusObservations(analysis);
+
+  if (analysis.page === undefined) {
+    return transport;
+  }
+
+  return [
+    ...transport,
+    ...noindexObservations(analysis),
+    ...headObservations(analysis),
+    ...canonicalObservations(analysis),
+    ...hreflangObservations(analysis),
+    ...jsonLdObservations(analysis),
+    ...renderingObservations(analysis),
+  ];
+}
+
+/**
+ * Folds the same catalogue ID seen on several pages into one observation.
+ *
+ * This is spec §6 — "un hallazgo repetido en N páginas es uno con `count: N`" —
+ * enforced at the probe rather than left to the normalizer. The normalizer would
+ * merge it too, but `raw/seo.json` is a published artifact and `raw.ts` is
+ * explicit that a probe must "never split one kind into N observations": a raw
+ * document with eight `SEO-TITLE-MISSING` entries is already wrong, whatever the
+ * next layer does about it.
+ *
+ * The first occurrence's evidence wins, because it is the seed page's and that
+ * is the one a reader will recognise. What the later occurrences contribute is
+ * the tally and the page list, which is the part that only a deep run knows.
+ */
+export function mergeObservations(
+  groups: readonly (readonly RawObservation[])[],
+): readonly RawObservation[] {
+  const merged = new Map<string, RawObservation>();
+  const pages = new Map<string, string[]>();
+
+  for (const group of groups) {
+    for (const observation of group) {
+      const existing = merged.get(observation.id);
+      const seen = pages.get(observation.id) ?? [];
+
+      pages.set(observation.id, [...seen, ...observation.affected]);
+
+      if (existing === undefined) {
+        merged.set(observation.id, observation);
+        continue;
+      }
+
+      merged.set(observation.id, {
+        ...existing,
+        count: existing.count + observation.count,
+        // Highest confidence wins: a check that measured the fact once has
+        // already established it, and a later inference must not walk it back.
+        confidence:
+          CONFIDENCE_RANK[observation.confidence] < CONFIDENCE_RANK[existing.confidence]
+            ? observation.confidence
+            : existing.confidence,
+      });
+    }
+  }
+
+  return [...merged.values()].map((observation) => {
+    const affected = [...new Set(pages.get(observation.id) ?? observation.affected)].sort();
+
+    return {
+      ...observation,
+      affected: affected.slice(0, MAX_LISTED),
+      evidence:
+        affected.length > observation.affected.length
+          ? { ...observation.evidence, pages_affected: affected.length }
+          : observation.evidence,
+    };
+  });
+}
 
 /**
  * Every check, in one list.

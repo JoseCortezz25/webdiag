@@ -16,7 +16,16 @@ const CLI_MODES: readonly Mode[] = ['quick', 'deep'];
 export const DEFAULT_OUT_DIR = './webdiag-out';
 
 /** `quick` is one URL with no crawl (spec §5.2); `deep` samples 5–10 pages. */
-const DEFAULT_PAGES: Readonly<Record<string, number>> = { quick: 1, deep: 5 };
+const DEFAULT_PAGES: Readonly<Record<string, number>> = { quick: 1, deep: 8 };
+
+/**
+ * The sampling window `deep` is defined by (issue #9). It is enforced here
+ * rather than silently clamped in the crawler: an operator who asks for three
+ * pages has misunderstood what the mode is, and a run that quietly gives them
+ * eight teaches them nothing. `quick` ignores `--pages` entirely, so the bound
+ * only applies where it means something.
+ */
+const DEEP_PAGE_RANGE = { min: 5, max: 10 } as const;
 
 export type ParsedScan = { readonly ok: true; readonly request: ScanRequest };
 export type ParseError = { readonly ok: false; readonly error: string };
@@ -120,6 +129,16 @@ export function parseScanArgs(argv: readonly string[]): ScanArgsResult {
 
   if (!/^https?:\/\//i.test(url)) {
     return fail(`'${url}' is not an http(s) URL`);
+  }
+
+  if (
+    mode === 'deep' &&
+    pages !== undefined &&
+    (pages < DEEP_PAGE_RANGE.min || pages > DEEP_PAGE_RANGE.max)
+  ) {
+    return fail(
+      `--pages must be between ${DEEP_PAGE_RANGE.min} and ${DEEP_PAGE_RANGE.max} in --mode deep`,
+    );
   }
 
   return {

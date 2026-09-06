@@ -127,21 +127,42 @@ describe('parseLycheeOutput', () => {
 
 describe('checkLinks', () => {
   test('uses the injected runner, so a unit test spawns nothing', async () => {
-    const calls: [string, number][] = [];
-    const report = await checkLinks('https://example.com/', {
+    const calls: [readonly string[], number][] = [];
+    const report = await checkLinks(['https://example.com/'], {
       timeoutMs: 1_234,
-      run: (url, timeoutMs) => {
-        calls.push([url, timeoutMs]);
+      run: (urls, timeoutMs) => {
+        calls.push([urls, timeoutMs]);
         return Promise.resolve(parseLycheeOutput(OK_REPORT));
       },
     });
 
-    expect(calls).toEqual([['https://example.com/', 1_234]]);
+    expect(calls).toEqual([[['https://example.com/'], 1_234]]);
     expect(report.broken).toHaveLength(1);
   });
 
+  test('a deep run hands every sampled page to one lychee invocation', async () => {
+    const calls: (readonly string[])[] = [];
+
+    await checkLinks(['https://example.com/', 'https://example.com/precios'], {
+      timeoutMs: 1_000,
+      run: (urls) => {
+        calls.push(urls);
+        return Promise.resolve(parseLycheeOutput(OK_REPORT));
+      },
+    });
+
+    expect(calls).toEqual([['https://example.com/', 'https://example.com/precios']]);
+  });
+
+  test('no pages to check degrades instead of spawning lychee with no input', async () => {
+    const report = await checkLinks([], { timeoutMs: 1_000 });
+
+    expect(report.outcome).toBe('failed');
+    expect(report.broken).toEqual([]);
+  });
+
   test('an injected failure is passed through as an outcome, not thrown', async () => {
-    const report = await checkLinks('https://example.com/', {
+    const report = await checkLinks(['https://example.com/'], {
       timeoutMs: 10,
       run: () =>
         Promise.resolve({

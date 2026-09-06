@@ -42,10 +42,22 @@ export type SitemapReport = {
   readonly validation: SitemapValidation | undefined;
   /** Set when the check could not run at all — a missing `xmllint`, say. */
   readonly toolError: string | undefined;
+  /**
+   * The page URLs the sitemap declares, bounded. Empty in `quick`: reading them
+   * only pays for itself once something cross-page is going to use them, and
+   * `followIndex` is what asks for that.
+   */
+  readonly locs: readonly string[];
 };
 
 export type SitemapOptions = TraceOptions & {
   readonly runXmllint?: XmllintRunner;
+  /**
+   * Whether to read `<loc>` values, and to follow a sitemap index one level
+   * down to reach real page URLs. `deep` sets it; `quick` has no use for the
+   * list and should not spend two extra round trips collecting it.
+   */
+  readonly followIndex?: boolean;
 };
 
 export type XmllintRunner = (
@@ -72,6 +84,96 @@ function rootElementOf(body: string): SitemapReport['root'] {
 function countEntries(body: string, root: SitemapReport['root']): number {
   const tag = root === 'sitemapindex' ? 'sitemap' : 'url';
   return body.match(new RegExp(`<\\s*(?:[\\w.-]+:)?${tag}(?:\\s|>)`, 'gi'))?.length ?? 0;
+}
+
+/** A `deep` run reads this many sitemap URLs at most, and no more child files. */
+export const MAX_COLLECTED_LOCS = 500;
+const MAX_CHILD_SITEMAPS = 2;
+
+/** `&amp;` and friends, which a `<loc>` is required to use. */
+function decodeXmlEntities(value: string): string {
+  return value
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&amp;/g, '&');
+}
+
+/**
+ * The `<loc>` values of a sitemap document, in document order.
+ *
+ * A regex over the raw XML rather than a parser: the only thing being extracted
+ * is the text of one element name, the document has already been validated
+ * against the published schema by `xmllint`, and pulling in an XML DOM to read a
+ * flat list of strings would be a dependency bought with nothing.
+ */
+export function extractLocs(body: string): readonly string[] {
+  const matches = body.matchAll(
+    /<\s*(?:[\w.-]+:)?loc\s*>([\s\S]*?)<\s*\/\s*(?:[\w.-]+:)?loc\s*>/gi,
+  );
+  const out: string[] = [];
+
+  for (const match of matches) {
+    const value = decodeXmlEntities((match[1] ?? '').trim());
+
+    if (value !== '' && /^https?:\/\//i.test(value)) {
+      out.push(value);
+    }
+
+    if (out.length >= MAX_COLLECTED_LOCS) {
+      break;
+    }
+  }
+
+  return [...new Set(out)];
+}
+
+/**
+ * Turns the `<loc>` list of a sitemap index into page URLs.
+ *
+ * Bounded to two child files on purpose. The point is a representative sample
+ * for the deep checks, not a mirror of the site: a news site with 400 monthly
+ * sitemaps would otherwise turn one check into 400 round trips.
+ */
+async function collectIndexedLocs(
+  childUrls: readonly string[],
+  options: SitemapOptions,
+): Promise<readonly string[]> {
+  const out: string[] = [];
+
+  for (const child of childUrls.slice(0, MAX_CHILD_SITEMAPS)) {
+    try {
+      const response = await fetchText(child, options);
+
+      if (response.status >= 200 && response.status < 300) {
+        out.push(...extractLocs(response.body));
+      }
+    } catch {
+      // A child sitemap that will not load narrows the sample; it is not a
+      // finding of its own, and the parent's own validation already ran.
+    }
+
+    if (out.length >= MAX_COLLECTED_LOCS) {
+      break;
+    }
+  }
+
+  return [...new Set(out)].slice(0, MAX_COLLECTED_LOCS);
+}
+
+async function locsFor(
+  body: string,
+  root: SitemapReport['root'],
+  options: SitemapOptions,
+): Promise<readonly string[]> {
+  if (options.followIndex !== true) {
+    return [];
+  }
+
+  const declared = extractLocs(body);
+
+  return root === 'sitemapindex' ? collectIndexedLocs(declared, options) : declared;
 }
 
 /** Writes both files, runs `xmllint`, and always removes them again. */
@@ -157,6 +259,7 @@ export async function inspectSitemap(
     byteLength: 0,
     validation: undefined,
     toolError: undefined,
+    locs: [],
   };
 
   for (const candidate of candidates) {
@@ -181,6 +284,7 @@ export async function inspectSitemap(
     const byteLength = new TextEncoder().encode(response.body).length;
     const entryCount = countEntries(response.body, root);
     const declaredInRobots = declared.includes(candidate);
+    const locs = await locsFor(response.body, root, options);
 
     if (root === 'unknown') {
       return {
@@ -192,6 +296,7 @@ export async function inspectSitemap(
         root,
         entryCount,
         byteLength,
+        locs,
         validation: {
           valid: false,
           schema: 'sitemap',
@@ -214,6 +319,7 @@ export async function inspectSitemap(
         root,
         entryCount,
         byteLength,
+        locs,
         validation: {
           valid: result.ok,
           schema: root === 'sitemapindex' ? 'siteindex' : 'sitemap',
@@ -231,6 +337,7 @@ export async function inspectSitemap(
         root,
         entryCount,
         byteLength,
+        locs,
         toolError: cause instanceof Error ? cause.message : String(cause),
       };
     }

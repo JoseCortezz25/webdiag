@@ -64,8 +64,20 @@ describe('parseScanArgs', () => {
     expect(request(['https://example.com', '--axes', 'perf,sec']).axes).toEqual(['PERF', 'SEC']);
   });
 
-  test('deep defaults to a 5 page sample', () => {
-    expect(request(['https://example.com', '--mode', 'deep']).pages).toBe(5);
+  test('deep defaults to a sample inside the 5–10 window issue #9 defines', () => {
+    const pages = request(['https://example.com', '--mode', 'deep']).pages;
+
+    expect(pages).toBeGreaterThanOrEqual(5);
+    expect(pages).toBeLessThanOrEqual(10);
+  });
+
+  test('deep accepts an explicit sample size inside the window', () => {
+    expect(request(['https://example.com', '--mode', 'deep', '--pages', '10']).pages).toBe(10);
+    expect(request(['https://example.com', '--mode', 'deep', '--pages', '5']).pages).toBe(5);
+  });
+
+  test('quick keeps ignoring the window: --pages there is not a deep sample', () => {
+    expect(request(['https://example.com', '--pages', '3']).pages).toBe(3);
   });
 
   test.each([
@@ -76,6 +88,14 @@ describe('parseScanArgs', () => {
     [['https://a', '--axes', 'NOPE'], '--axes must be a comma-separated subset'],
     [['https://a', '--pages', '0'], '--pages must be a positive integer'],
     [['https://a', '--pages', 'many'], '--pages must be a positive integer'],
+    [
+      ['https://a', '--mode', 'deep', '--pages', '3'],
+      '--pages must be between 5 and 10 in --mode deep',
+    ],
+    [
+      ['https://a', '--mode', 'deep', '--pages', '25'],
+      '--pages must be between 5 and 10 in --mode deep',
+    ],
     [['https://a', '--out'], '--out requires a value'],
     [['https://a', '--nope', 'x'], "unknown option '--nope'"],
   ])('rejects %p', (argv, expected) => {
