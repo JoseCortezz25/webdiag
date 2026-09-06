@@ -3,12 +3,16 @@
  *
  * Two decisions are worth the ink.
  *
- * **`--accept` includes 401, 403 and 429.** Those are not broken links, they
- * are a server declining to be crawled by a stranger, and reporting them as
- * broken would fill a client report with links that work perfectly in a
- * browser. A false "your links are broken" is more expensive than a missed
- * genuinely-dead link, because it costs the reader their trust in the whole
- * document.
+ * **`--accept` includes 401, 403, 429 and 999.** The first three are a server
+ * declining to be crawled by a stranger, not a broken link. `999` joins them
+ * for the same reason plus one more (issue #12): it is not a registered HTTP
+ * status at all — LinkedIn returns it to every unauthenticated client on every
+ * profile URL, browser or bot, as an anti-scraping response. The calibration
+ * run against `alfonso-portafolio.vercel.app` reported the author's own,
+ * working LinkedIn profile as a broken link on this status alone, reproduced
+ * identically in both `quick` and `deep` mode. A false "your links are broken"
+ * is more expensive than a missed genuinely-dead link, because it costs the
+ * reader their trust in the whole document.
  *
  * **A lychee that does not finish produces no finding, not a failed axis.** The
  * probe still has twenty other checks and a budget to keep (spec §5.2: quick is
@@ -75,11 +79,35 @@ function toBrokenLinks(
     });
 }
 
+/**
+ * One row per target URL, not one per page that happened to link it.
+ *
+ * `error_map`/`timeout_map` are keyed by *source* page, so a footer link
+ * broken on every crawled page arrives once per page — and, in `deep` mode,
+ * a second time from lychee's own cache. The calibration run against
+ * `alfonso-portafolio.vercel.app` (issue #12) counted two real broken targets
+ * as five, inflating the deduction 2.5x. First occurrence wins because lychee
+ * emits the live check before the cached echo.
+ */
+function dedupeByUrl(links: readonly BrokenLink[]): readonly BrokenLink[] {
+  const seen = new Map<string, BrokenLink>();
+
+  for (const link of links) {
+    if (!seen.has(link.url)) {
+      seen.set(link.url, link);
+    }
+  }
+
+  return [...seen.values()];
+}
+
 export function parseLycheeOutput(stdout: string): LinkReport {
   const parsed = JSON.parse(stdout) as LycheeOutput;
 
-  const broken = [...toBrokenLinks(parsed.error_map), ...toBrokenLinks(parsed.timeout_map)].sort(
-    (left, right) => (left.url < right.url ? -1 : left.url > right.url ? 1 : 0),
+  const broken = dedupeByUrl(
+    [...toBrokenLinks(parsed.error_map), ...toBrokenLinks(parsed.timeout_map)].sort(
+      (left, right) => (left.url < right.url ? -1 : left.url > right.url ? 1 : 0),
+    ),
   );
 
   return {
@@ -150,7 +178,7 @@ export async function checkLinks(
         '--max-retries',
         '0',
         '--accept',
-        '200..=299,401,403,429',
+        '200..=299,401,403,429,999',
         '--',
         ...urls,
       ],

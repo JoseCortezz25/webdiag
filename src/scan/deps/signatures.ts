@@ -17,6 +17,15 @@
  * A false positive here costs an `info` finding saying "we could not pin a
  * version". A false negative silently narrows the scan. The list is tuned
  * accordingly.
+ *
+ * The jQuery pattern learned this the hard way (issue #12): Google's
+ * `gtag.js` and `gtm.js` carry a stray jQuery license comment ("jQuery (c)
+ * 2005, 2012 jQuery Foundation, Inc. jquery.org/license.") above an unrelated
+ * internal helper — no jQuery code, no `jQuery.fn.jquery`, just the string.
+ * Matching on the license URL alone reported "jquery" on two of the three
+ * calibration sites, neither of which ships jQuery through that script.
+ * `jQuery.fn.jquery` is the version-banner property every real jQuery build
+ * sets on itself, so it stays the only signal.
  */
 
 export type LibrarySignature = {
@@ -27,7 +36,7 @@ export type LibrarySignature = {
 };
 
 export const LIBRARY_SIGNATURES: readonly LibrarySignature[] = [
-  { library: 'jquery', pattern: /jQuery\.fn\.jquery|jquery\.(?:com|org)\/license/ },
+  { library: 'jquery', pattern: /jQuery\.fn\.jquery/ },
   { library: 'jquery-ui', pattern: /jqueryui\.com|jQuery\.ui\.version/ },
   {
     library: 'react',

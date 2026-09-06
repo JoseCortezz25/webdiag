@@ -123,6 +123,21 @@ export function isMajorBehind(detected: string, latest: string): boolean {
   return current !== undefined && newest !== undefined && newest > current;
 }
 
+/**
+ * A prerelease channel a framework vendors on the application's behalf, never
+ * one an author installs directly (issue #12).
+ *
+ * `alfonso-portafolio.vercel.app` detected `react-dom@18.3.0-canary-<hash>-
+ * <date>` against a latest of `19.2.8` — a real major behind on paper, but
+ * that canary is the exact React build Next.js bundles into its own runtime.
+ * The site owner cannot bump it without bumping Next.js, so `DEPS-LIB-OUTDATED`
+ * would be asking them to fix a version they never chose. `beta`/`rc`/`alpha`
+ * stay in scope: those are channels an author picks and can move off of.
+ */
+export function isVendoredRuntimeVersion(version: string): boolean {
+  return /-(?:canary|nightly)(?:[.-]|$)/i.test(version);
+}
+
 /** npm name for a retire.js component, when one can be stated without guessing. */
 export function npmNameFor(result: {
   readonly component: string;

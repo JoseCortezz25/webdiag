@@ -188,6 +188,43 @@ describe('DEPS-LIB-OUTDATED', () => {
       },
     ]);
   });
+
+  test('stays quiet on a framework-vendored canary build (issue #12)', () => {
+    // alfonso-portafolio.vercel.app: react-dom 18.3.0-canary-... is the exact
+    // build Next.js bundles into its own runtime, not a version the site
+    // owner chose or can bump independently of Next.js.
+    const analysis = depsAnalysis({
+      retire: retireReport([
+        {
+          file: '/tmp/webdiag-deps-fixture/000-vendor.js',
+          results: [
+            retireResult({
+              component: 'react-dom',
+              npmname: 'react-dom',
+              version: '18.3.0-canary-178c267a4e-20241218',
+            }),
+          ],
+        },
+      ]),
+      enrichment: enrichment({ registry: { available: true, latest: { 'react-dom': '19.2.8' } } }),
+    });
+
+    expect(idsOf(analysis)).not.toContain('DEPS-LIB-OUTDATED');
+  });
+
+  test('still fires on a beta/rc the author chose to install', () => {
+    const analysis = depsAnalysis({
+      retire: retireReport([
+        {
+          file: '/tmp/webdiag-deps-fixture/000-vendor.js',
+          results: [retireResult({ component: 'vue', npmname: 'vue', version: '3.0.0-beta.1' })],
+        },
+      ]),
+      enrichment: enrichment({ registry: { available: true, latest: { vue: '4.0.0' } } }),
+    });
+
+    expect(idsOf(analysis)).toContain('DEPS-LIB-OUTDATED');
+  });
 });
 
 describe('DEPS-SOURCEMAP-EXPOSED', () => {
@@ -238,6 +275,37 @@ describe('DEPS-SOURCEMAP-EXPOSED', () => {
     });
 
     expect(observation(analysis, 'DEPS-SOURCEMAP-EXPOSED').count).toBe(2);
+  });
+
+  test('drops third-party maps: a CDN package publishing its own map is not the client leaking theirs (issue #12)', () => {
+    const analysis = depsAnalysis({
+      sourcemaps: [
+        sourcemapFinding({
+          asset: 'https://cdn.jsdelivr.net/npm/gsap@3.13.0/dist/gsap.min.js',
+          url: 'https://cdn.jsdelivr.net/npm/gsap@3.13.0/dist/gsap.min.js.map',
+          thirdParty: true,
+        }),
+      ],
+    });
+
+    expect(idsOf(analysis)).not.toContain('DEPS-SOURCEMAP-EXPOSED');
+  });
+
+  test('keeps a first-party map even when a third-party one is also present', () => {
+    const analysis = depsAnalysis({
+      sourcemaps: [
+        sourcemapFinding(),
+        sourcemapFinding({
+          asset: 'https://cdn.jsdelivr.net/npm/gsap@3.13.0/dist/gsap.min.js',
+          url: 'https://cdn.jsdelivr.net/npm/gsap@3.13.0/dist/gsap.min.js.map',
+          thirdParty: true,
+        }),
+      ],
+    });
+
+    const finding = observation(analysis, 'DEPS-SOURCEMAP-EXPOSED');
+    expect(finding.count).toBe(1);
+    expect(finding.affected).toEqual(['/assets/app.js']);
   });
 });
 

@@ -63,11 +63,16 @@ describe('conventionalMapUrl', () => {
   });
 });
 
-async function assetWith(content: string, directory: string, url: string): Promise<JsAsset> {
+async function assetWith(
+  content: string,
+  directory: string,
+  url: string,
+  thirdParty = false,
+): Promise<JsAsset> {
   const path = `${directory}/${url.split('/').pop() ?? 'app.js'}`;
   await Bun.write(path, content);
 
-  return { url, path, file: path, bytes: content.length, status: 200, thirdParty: false };
+  return { url, path, file: path, bytes: content.length, status: 200, thirdParty };
 }
 
 function fetcherFor(
@@ -98,6 +103,7 @@ describe('findExposedSourcemaps', () => {
           status: 200,
           sources: 2,
           sourcesContent: true,
+          thirdParty: false,
         },
       ]);
     });
@@ -172,8 +178,27 @@ describe('findExposedSourcemaps', () => {
           status: 200,
           sources: 2,
           sourcesContent: true,
+          thirdParty: false,
         },
       ]);
+    });
+  });
+
+  test("carries the asset's thirdParty flag through, for the adapter to decide with", async () => {
+    await withWorkspace(async (workspace) => {
+      const asset = await assetWith(
+        'window.x=1\n//# sourceMappingURL=app.js.map',
+        workspace.directory,
+        'https://cdn.example/assets/app.js',
+        true,
+      );
+
+      const found = await findExposedSourcemaps(
+        [asset],
+        fetcherFor({ 'https://cdn.example/assets/app.js.map': { status: 200, body: MAP } }),
+      );
+
+      expect(found.map((entry) => entry.thirdParty)).toEqual([true]);
     });
   });
 

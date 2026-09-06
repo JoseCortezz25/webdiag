@@ -101,6 +101,7 @@ export function sourcemapFinding(overrides: Partial<SourcemapFinding> = {}): Sou
     status: 200,
     sources: 42,
     sourcesContent: true,
+    thirdParty: false,
     ...overrides,
   };
 }
