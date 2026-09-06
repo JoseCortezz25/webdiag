@@ -17,9 +17,11 @@ function makeOutput(): CliOutput & { out: string[]; err: string[] } {
 }
 
 /**
- * Keeps `runCli` off the real filesystem *and* off the network while still
- * exercising the dispatch. The default probe set launches Chrome (spec §8,
- * phase 1); a CLI test asserts routing, not accessibility.
+ * Keeps `runCli` off the real filesystem while still exercising the dispatch.
+ * Its counterpart is `probes: stubProbes()` below, which keeps it off the
+ * network: the default registry launches Chrome and shells out to external
+ * binaries, and these tests are about argument dispatch, not about what a live
+ * host answered.
  */
 function memoryWriter(): ArtifactWriter & { files: Map<string, string> } {
   const files = new Map<string, string>();

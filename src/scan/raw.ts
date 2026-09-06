@@ -68,6 +68,12 @@ export const rawDocumentSchema = z.object({
     mode: modeSchema,
   }),
   observations: z.array(rawObservationSchema).readonly(),
+  /**
+   * What the probe could *not* see, in plain language. A probe that skipped a
+   * check because a tool was missing or robots.txt refused must say so: a
+   * shorter finding list would otherwise read as a cleaner site.
+   */
+  notes: z.array(z.string()).readonly().optional(),
 });
 
 export type RawDocument = z.infer<typeof rawDocumentSchema>;

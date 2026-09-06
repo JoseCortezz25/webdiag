@@ -19,6 +19,7 @@ import { AXES } from '../catalog/index.ts';
 import { a11yProbe } from './a11y/index.ts';
 import { lighthouseProbe } from './perf/index.ts';
 import type { Probe } from './probe.ts';
+import { type SecurityProbeOptions, securityProbe } from './sec/index.ts';
 import { stubProbe } from './stub-probe.ts';
 
 /**
@@ -26,7 +27,9 @@ import { stubProbe } from './stub-probe.ts';
  * today; the rest are constructed from their own pinned defaults, so this stays
  * one optional object rather than a parameter per axis.
  */
-export type ProbeRegistryOptions = Record<string, never>;
+export type ProbeRegistryOptions = {
+  readonly security?: SecurityProbeOptions;
+};
 
 /**
  * Axes with a real probe. Adding one is a single line here; every axis absent
@@ -35,6 +38,7 @@ export type ProbeRegistryOptions = Record<string, never>;
 const REAL_PROBES: Readonly<Partial<Record<Axis, (options: ProbeRegistryOptions) => Probe>>> = {
   PERF: () => lighthouseProbe(),
   A11Y: () => a11yProbe(),
+  SEC: (options) => securityProbe(options.security),
 };
 
 /** Axes whose probe measures the real site, in catalogue order. */

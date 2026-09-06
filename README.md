@@ -9,24 +9,44 @@ their output against a stable findings catalog, and emits machine-readable JSON 
 self-contained HTML report. It runs without AI and is usable in CI. Interpreting the
 findings for a specific client is the job of a separate Claude skill, not of this CLI.
 
-> **Status: phase 1 — the first real probe.** Accessibility is measured for real:
-> `A11Y` runs [axe-core](https://github.com/dequelabs/axe-core) against the page as
-> Chrome renders it. The other five axes are still backed by the phase 0 fixture and
-> their numbers are **invented**. `meta.json` names the tool per axis, so a fixture is
-> never mistaken for a measurement: look for `webdiag-stub` there before quoting a
-> number to anyone.
+> **Status: phase 1 — three real probes, three fixtures.** The whole pipeline runs end to
+> end (orchestrator → probe → normalizer → report). **PERF, A11Y and SEC are measured for
+> real**; SEO, DEPS and AGENT are still stubs whose numbers are **invented**. Each axis
+> names its own source: a fixture axis reports the tool `webdiag-stub@0.0.0-fixture`, so a
+> real number and an invented one are never presented as the same kind of thing.
 
 ## Requirements
 
 - [Bun](https://bun.sh) `>= 1.2` (developed against 1.3.11)
 - Chrome, downloaded automatically by `bun install` (Puppeteer's own build). The
-  accessibility probe needs a real rendering engine; nothing else does yet.
+  accessibility and performance probes need a real rendering engine.
+- `curl` — required by the SEC probe to read security headers off the wire. Present by
+  default on macOS and most Linux distributions.
 
 No Node.js or npm required.
 
-Chrome's sandbox is left on, because the probe renders untrusted third-party pages.
+Chrome's sandbox is left on, because the probes render untrusted third-party pages.
 Containers that cannot create the user namespace it needs can opt out explicitly with
 `WEBDIAG_CHROME_NO_SANDBOX=1`.
+
+### Optional: testssl.sh
+
+The SEC probe's three TLS findings (`SEC-TLS-WEAK`, `SEC-TLS-EXPIRING`, `SEC-TLS-EXPIRED`)
+come from [testssl.sh](https://testssl.sh). It is optional: without it the probe still
+checks headers and records in the report that TLS was not evaluated.
+
+```bash
+bun run install:testssl    # pinned copy into git-ignored vendor/
+```
+
+Alternatively put `testssl.sh` on `PATH`, or point `WEBDIAG_TESTSSL` at it. On macOS, GNU
+`timeout` is usually absent; the probe detects that and drops testssl.sh's per-connection
+timeout flags rather than failing, because passing them without `timeout(1)` makes
+testssl.sh abort before running a single check.
+
+The SEC probe identifies itself as `FlareDiagnostics/1.0 (+<contact>)` on every request,
+honours `robots.txt` (RFC 9309), and throttles to one request per second per host. Set
+`WEBDIAG_CONTACT` to change the contact URL an operator sees in their access log.
 
 ## Installation
 

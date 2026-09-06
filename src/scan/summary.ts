@@ -61,6 +61,8 @@ export type ProbeSummary = {
   readonly components: readonly ToolComponent[] | undefined;
   readonly status: ProbeOutcome['status'];
   readonly error: string | undefined;
+  /** Limits the probe declared on its own coverage. Never dropped. */
+  readonly notes: readonly string[];
 };
 
 export type AxisSummary = {
@@ -152,6 +154,7 @@ function probeSummary(outcome: ProbeOutcome): ProbeSummary {
     components: outcome.tool.components,
     status: outcome.status,
     error: outcome.status === 'failed' ? outcome.error : undefined,
+    notes: outcome.status === 'ok' ? (outcome.raw.notes ?? []) : [],
   };
 }
 
@@ -208,6 +211,7 @@ export function buildSummary(input: SummaryInput): Summary {
             components: undefined,
             status: 'failed',
             error: 'No probe registered for this axis.',
+            notes: [],
           }
         : probeSummary(outcome);
 

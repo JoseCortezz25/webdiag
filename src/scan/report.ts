@@ -151,6 +151,9 @@ function axisCard(axis: AxisSummary): string {
     scoreMarkup(axis),
     axis.zeroed ? '<span class="axis-note">Anulado por hallazgo bloqueante</span>' : '',
     `<span class="axis-meta">${axis.counts.scored} hallazgos puntuados</span>`,
+    axis.probe.notes.length === 0
+      ? ''
+      : `<span class="axis-note limited">Cobertura parcial (${axis.probe.notes.length})</span>`,
     probe,
     '</a>',
   ].join('');
@@ -199,6 +202,23 @@ function toolLine(axis: AxisSummary): string {
   return `<p class="tool">Herramienta: <code>${escapeHtml(axis.probe.tool)}</code>${suffix} · estado <code>${escapeHtml(axis.probe.status)}</code></p>`;
 }
 
+/**
+ * What the probe admits it did not check. Rendered next to the score rather than
+ * in a footnote: a reader who does not see it will read the score as coverage.
+ */
+function coverageSection(axis: AxisSummary): string {
+  if (axis.probe.notes.length === 0) {
+    return '';
+  }
+
+  return [
+    '<div class="coverage">',
+    '<h3>Alcance de esta medicion</h3>',
+    `<ul>${axis.probe.notes.map((note) => `<li>${escapeHtml(note)}</li>`).join('')}</ul>`,
+    '</div>',
+  ].join('');
+}
+
 function axisSection(axis: AxisSummary): string {
   const mentions =
     axis.mentions.length === 0
@@ -227,6 +247,7 @@ function axisSection(axis: AxisSummary): string {
       : `<p class="axis-score-inline">${axis.score}<small>/${axis.maxScore}</small></p>`,
     '</header>',
     toolLine(axis),
+    coverageSection(axis),
     deductionTable(axis),
     findingList(axis.findings, 'Sin hallazgos puntuados en este eje.'),
     mentions,
@@ -304,6 +325,11 @@ a{color:var(--accent)}
 .axis-note{font-size:12px;color:var(--critical)}
 .axis-meta{font-size:12px;color:var(--dim)}
 .probe-failed{font-size:12px;color:var(--medium);margin:4px 0 0}
+.axis-note.limited{color:var(--medium)}
+.coverage{border:1px solid var(--line);border-left:3px solid var(--medium);border-radius:8px;background:var(--panel);padding:10px 16px;margin:0 0 14px}
+.coverage h3{margin:0 0 4px}
+.coverage ul{margin:0;padding-left:18px}
+.coverage li{color:var(--dim);font-size:13px}
 .no-composite{color:var(--dim);font-size:13px;margin:0 0 32px;border-top:1px dashed var(--line);padding-top:10px}
 .axis{border-top:1px solid var(--line);padding-top:22px;margin-top:34px}
 .axis-header{display:flex;align-items:baseline;justify-content:space-between;gap:12px}

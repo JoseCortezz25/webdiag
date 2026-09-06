@@ -35,9 +35,11 @@ const REQUEST: ScanRequest = {
 const FIXED_CLOCK = () => new Date('2026-09-06T12:00:00.000Z');
 
 /**
- * Always injects the stub set. These tests are about the orchestrator, not about
- * which probes ship by default — and the default set now drives a real browser,
- * which has no business inside `bun test`.
+ * Always injects the stub set. These tests are about the orchestrator's wiring,
+ * not about which probes ship by default — and the default registry now drives
+ * a real browser and real external binaries against a live host, so they answer
+ * for that wiring only if nothing in them depends on what a third party served
+ * today.
  */
 async function scan(overrides: Partial<ScanRequest> = {}, probes: readonly Probe[] = stubProbes()) {
   const writer = memoryWriter();

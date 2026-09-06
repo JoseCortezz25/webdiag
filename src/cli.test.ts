@@ -40,30 +40,66 @@ describe('webdiag executable', () => {
 });
 
 /**
- * PERF and A11Y are excluded on purpose: both drive a real headless Chrome over
- * a real network, so their numbers legitimately differ between two runs, and
- * asserting byte equality on them would be asserting that the internet is
- * deterministic. Each has its own probe test against a local server. The
- * determinism contract is about the normalizer, and the remaining axes exercise
- * it end to end through a real process.
+ * The end-to-end run targets a server this file starts, not a public site.
+ *
+ * Every axis is real from phase 1 on, so pointing this test at `example.com`
+ * would make it assert that a third party's headers, markup and bundles had not
+ * changed overnight — "findings.json is byte-for-byte reproducible" would then
+ * be a claim about their deploy schedule rather than about this code.
+ *
+ * Serving over plain HTTP is part of the fixture: it exercises the SEC probe's
+ * "there is no TLS to inspect" path, which is a stated outcome and not a
+ * failure. The TLS branch itself is covered by unit tests over captured
+ * `testssl.sh` JSON.
+ *
+ * PERF, A11Y and DEPS are excluded on purpose: all three launch a real headless
+ * Chrome, which is minutes of wall clock and a browser download inside what is
+ * otherwise a fast suite. Each is exercised against its own local server in
+ * `src/scan/{perf,a11y,deps}/probe.test.ts`. What is left still covers the
+ * contract this test is about — the CLI process, the artifact set and the
+ * determinism of `findings.json` — over three real probes.
  */
-const DETERMINISTIC_AXES = 'SEO,DEPS,SEC,AGENT';
+const E2E_AXES = 'SEO,SEC,AGENT';
 
 describe('webdiag scan (end to end)', () => {
   const outDir = `${process.env.TMPDIR ?? '/tmp'}/webdiag-cli-e2e-${process.pid}`;
 
+  const server = Bun.serve({
+    port: 0,
+    fetch(request) {
+      const { pathname } = new URL(request.url);
+
+      if (pathname === '/robots.txt') {
+        return new Response('User-agent: *\nDisallow: /private/\n', {
+          headers: { 'content-type': 'text/plain' },
+        });
+      }
+
+      return new Response('<!doctype html><title>fixture</title>', {
+        headers: {
+          'content-type': 'text/html',
+          server: 'fixture/1.2.3',
+          'set-cookie': 'sid=abc; Path=/',
+        },
+      });
+    },
+  });
+
+  const target = `http://127.0.0.1:${server.port}/`;
+
   afterAll(async () => {
+    await server.stop(true);
     await rm(outDir, { recursive: true, force: true });
   });
 
   test('writes the five artifacts and repeats findings.json byte for byte', async () => {
     const first = await runProcess([
       'scan',
-      'https://example.com',
+      target,
       '--mode',
       'quick',
       '--axes',
-      DETERMINISTIC_AXES,
+      E2E_AXES,
       '--out',
       outDir,
     ]);
@@ -80,16 +116,34 @@ describe('webdiag scan (end to end)', () => {
 
     const second = await runProcess([
       'scan',
-      'https://example.com',
+      target,
       '--mode',
       'quick',
       '--axes',
-      DETERMINISTIC_AXES,
+      E2E_AXES,
       '--out',
       outDir,
     ]);
 
     expect(second.exitCode).toBe(EXIT.OK);
     expect(await Bun.file(`${outDir}/findings.json`).text()).toBe(findings);
+  });
+
+  test('the SEC axis reports what it read off the real wire', async () => {
+    await runProcess(['scan', target, '--mode', 'quick', '--axes', E2E_AXES, '--out', outDir]);
+
+    const raw = JSON.parse(await Bun.file(`${outDir}/raw/SEC.json`).text());
+    const ids: string[] = raw.observations.map((observation: { id: string }) => observation.id);
+
+    // Every header the fixture omits, plus the two it gets wrong on purpose.
+    expect(ids).toContain('SEC-CSP-MISSING');
+    expect(ids).toContain('SEC-XFO-MISSING');
+    expect(ids).toContain('SEC-COOKIE-INSECURE');
+    expect(ids).toContain('SEC-SERVER-VERSION-DISCLOSED');
+
+    // Plain HTTP: the probe must decline these rather than guess at them.
+    expect(ids).not.toContain('SEC-HSTS-MISSING');
+    expect(raw.notes.join('\n')).toContain('no TLS to inspect');
+    expect(raw.notes.join('\n')).toContain('robots.txt');
   });
 });

@@ -42,7 +42,13 @@ export {
   PINNED_PERF_TOOL,
 } from './perf/index.ts';
 export { type Probe, type ProbeContext, type ProbeOutcome, runProbe } from './probe.ts';
-export { defaultProbes, probeFor } from './probes.ts';
+export {
+  defaultProbes,
+  isMeasured,
+  type ProbeRegistryOptions,
+  probeFor,
+  REAL_PROBE_AXES,
+} from './probes.ts';
 export {
   parseRawDocument,
   RAW_SCHEMA_VERSION,
@@ -53,12 +59,23 @@ export {
   type ToolVersion,
 } from './raw.ts';
 export { escapeHtml, renderReport } from './report.ts';
+export {
+  analyzeHeaders,
+  analyzeTestssl,
+  checkRobots,
+  createThrottle,
+  SECURITY_TOOL_NAME,
+  type SecurityProbeOptions,
+  securityProbe,
+  userAgent,
+} from './sec/index.ts';
 export { STUB_TOOL, stubProbe, stubProbes } from './stub-probe.ts';
 export {
   type AxisSummary,
   buildSummary,
   DISCLAIMERS,
   type FindingSummary,
+  type ProbeSummary,
   SUMMARY_SCHEMA_VERSION,
   type Summary,
 } from './summary.ts';
