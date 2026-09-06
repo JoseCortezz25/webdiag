@@ -1,0 +1,120 @@
+name: webdiag budget
+
+# Fails the build when webdiag finds a blocking finding, or a finding at or
+# above the configured severity, in white-box mode (--repo). This is a
+# reusable workflow: it does nothing on its own and only runs when another
+# workflow calls it with `uses:`, or when triggered manually. See the "CI
+# budgets" section of the webdiag README for the caller snippet, the full
+# input reference, and how to change what fails the build.
+#
+# webdiag is not published as a package or an Action, so this workflow builds
+# it from its own repository on every run rather than installing a release.
+
+on:
+  workflow_call:
+    inputs:
+      url:
+        description: 'Target URL webdiag records as the scan target (only fetched by non-white-box axes)'
+        required: false
+        type: string
+      mode:
+        description: 'quick or deep'
+        required: false
+        type: string
+      axes:
+        description: 'Comma-separated subset of PERF,A11Y,SEO,DEPS,SEC,AGENT'
+        required: false
+        type: string
+      fail-on:
+        description: 'Severity budget: critical, high, medium, low or info. A finding at or above this fails the build; a blocking finding always does.'
+        required: false
+        type: string
+  workflow_dispatch:
+    inputs:
+      url:
+        description: 'Target URL webdiag records as the scan target (only fetched by non-white-box axes)'
+        required: false
+        type: string
+      mode:
+        description: 'quick or deep'
+        required: false
+        type: string
+      axes:
+        description: 'Comma-separated subset of PERF,A11Y,SEO,DEPS,SEC,AGENT'
+        required: false
+        type: string
+      fail-on:
+        description: 'Severity budget: critical, high, medium, low or info. A finding at or above this fails the build; a blocking finding always does.'
+        required: false
+        type: string
+
+concurrency:
+  group: webdiag-budget-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  WEBDIAG_URL: ${{ inputs.url || 'https://example.com' }}
+  WEBDIAG_MODE: ${{ inputs.mode || 'quick' }}
+  WEBDIAG_AXES: ${{ inputs.axes || 'DEPS' }}
+  WEBDIAG_FAIL_ON: ${{ inputs['fail-on'] || 'high' }}
+
+jobs:
+  budget:
+    name: webdiag scan (white-box) against a severity budget
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout the repository being scanned
+        uses: actions/checkout@v4
+        with:
+          path: target
+
+      - name: Checkout webdiag
+        uses: actions/checkout@v4
+        with:
+          repository: JoseCortezz25/webdiag
+          path: webdiag
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.11
+
+      - name: Build webdiag
+        working-directory: webdiag
+        run: |
+          bun install --frozen-lockfile
+          bun run build
+
+      - name: Install white-box tools (osv-scanner, Syft)
+        if: contains(env.WEBDIAG_AXES, 'DEPS')
+        working-directory: webdiag
+        run: bun run install:whitebox
+
+      - name: Run the budgeted scan
+        working-directory: webdiag
+        env:
+          # The built CLI runs from dist/, where auto-detection relative to the
+          # source tree does not apply — point it at what install:whitebox just
+          # placed in vendor/ explicitly.
+          WEBDIAG_OSV_SCANNER: ${{ github.workspace }}/webdiag/vendor/osv-scanner
+          WEBDIAG_SYFT: ${{ github.workspace }}/webdiag/vendor/syft
+        run: |
+          ./dist/cli.js scan "${WEBDIAG_URL}" \
+            --repo "${{ github.workspace }}/target" \
+            --mode "${WEBDIAG_MODE}" \
+            --axes "${WEBDIAG_AXES}" \
+            --fail-on "${WEBDIAG_FAIL_ON}" \
+            --out "${{ github.workspace }}/webdiag-out"
+
+      - name: Upload the report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: webdiag-report
+          path: webdiag-out/
+          retention-days: 14

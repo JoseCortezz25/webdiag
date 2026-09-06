@@ -10,6 +10,8 @@ export const EXIT = {
   NOT_IMPLEMENTED: 2,
   /** The invocation was valid but the run could not produce its artifacts. */
   FAILED: 3,
+  /** The run produced artifacts, but a `--fail-on` budget was exceeded. */
+  BUDGET_EXCEEDED: 4,
 } as const;
 
 export type ExitCode = (typeof EXIT)[keyof typeof EXIT];
