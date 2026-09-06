@@ -158,10 +158,13 @@ Mayúsculas, guiones, sin números correlativos. `SEO-CANONICAL-CHAIN` se lee so
 | `DEPS-LIB-DEPRECATED` | 3 | high | Paquete marcado como deprecated en npm |
 | `DEPS-LIB-UNMAINTAINED` | 3 | medium | Sin publicaciones ni actividad en el repo (OpenSSF Scorecard) |
 | `DEPS-RUNTIME-EOL` | 3 | high | Runtime o framework fuera de soporte (endoflife.date) |
+| `DEPS-LINT-ERRORS` | 3 | medium | Errores de lint detectados por la configuración propia de ESLint del proyecto |
 | `DEPS-SOURCEMAP-EXPOSED` | 2 | medium | Sourcemaps públicos en producción (eje dueño: DEPS; mención informativa en SEC, sin restar ahí) |
 | `DEPS-VERSION-UNDETERMINED` | 2 | info | Se detectó la librería pero no la versión: el análisis black-box es parcial |
 
-> `DEPS-VERSION-UNDETERMINED` es obligatorio en modo black-box. Es lo que evita que el cliente lea "0 vulnerabilidades" como "está limpio" cuando en realidad significa "no pudimos ver".
+> `DEPS-VERSION-UNDETERMINED` es obligatorio en modo black-box. Es lo que evita que el cliente lea "0 vulnerabilidades" como "está limpio" cuando en realidad significa "no pudimos ver". En modo white-box (`--repo`) no se emite: la versión viene del lockfile, nunca es indeterminada.
+>
+> `DEPS-LIB-DEPRECATED`, `DEPS-LIB-UNMAINTAINED`, `DEPS-RUNTIME-EOL` y `DEPS-LINT-ERRORS` solo se evalúan en modo white-box: necesitan el repositorio (lockfiles, `package.json`, la instalación de ESLint del propio proyecto).
 
 ### SEC — Seguridad
 

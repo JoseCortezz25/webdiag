@@ -23,6 +23,12 @@ export type CommandResult = {
 export type CommandOptions = {
   /** Hard wall-clock ceiling. An external tool that hangs must not hang the run. */
   readonly timeoutMs?: number;
+  /**
+   * Working directory for the child. Only tools that resolve configuration
+   * relative to the project they inspect need it; ESLint is the reason it
+   * exists.
+   */
+  readonly cwd?: string;
 };
 
 /** Injected so tests can drive the parser without spawning anything. */
@@ -41,6 +47,7 @@ export const runCommand: CommandRunner = async (command, options = {}) => {
   const child = Bun.spawn([executable, ...rest], {
     stdout: 'pipe',
     stderr: 'pipe',
+    ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
     ...(options.timeoutMs === undefined ? {} : { timeout: options.timeoutMs }),
   });
   const [stdout, stderr, exitCode] = await Promise.all([

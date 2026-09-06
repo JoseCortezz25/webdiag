@@ -74,6 +74,14 @@ export const rawDocumentSchema = z.object({
    * shorter finding list would otherwise read as a cleaner site.
    */
   notes: z.array(z.string()).readonly().optional(),
+  /**
+   * Extra files a probe produces alongside its observations, keyed by the
+   * artifact's own name under the run's output directory (e.g. `sbom.cdx.json`
+   * for the white-box DEPS probe's Syft SBOM). The orchestrator writes these
+   * without needing to know what any of them mean — same reason it never
+   * learns retire.js, Lighthouse or osv-scanner's vocabulary.
+   */
+  artifacts: z.record(z.string(), z.string()).readonly().optional(),
 });
 
 export type RawDocument = z.infer<typeof rawDocumentSchema>;
