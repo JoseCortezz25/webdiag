@@ -46,6 +46,35 @@ describe('escapeHtml', () => {
   });
 });
 
+describe('renderReport — el eje AGENT declara su impacto no probado', () => {
+  test('states it in the axis section, not only in the disclaimer block', async () => {
+    const { html } = await renderStubReport();
+    const section = html.slice(html.indexOf('id="axis-AGENT"'));
+
+    expect(section).toContain('Impacto no probado');
+    expect(section).toContain('no debe leerse como un factor de posicionamiento demostrado');
+  });
+
+  test('marks the axis card too, so a reader who only skims the grid still sees it', async () => {
+    const { html } = await renderStubReport();
+    const grid = html.slice(html.indexOf('<div class="axis-grid">'));
+
+    expect(grid.slice(0, grid.indexOf('no-composite'))).toContain('class="axis-caveat"');
+  });
+
+  test('no other axis carries the caveat', async () => {
+    const { html } = await renderStubReport();
+
+    expect(html.match(/class="axis-caveat"/g)).toHaveLength(1);
+  });
+
+  test('and the summary disclaimers carry it in machine-readable form', async () => {
+    const { summary } = await renderStubReport();
+
+    expect(summary.disclaimers.some((line) => line.includes('Agent-readiness'))).toBe(true);
+  });
+});
+
 describe('renderReport', () => {
   test('is a self-contained document with no external requests', async () => {
     const { html } = await renderStubReport();

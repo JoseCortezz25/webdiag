@@ -30,6 +30,20 @@ const AXIS_LABEL: Readonly<Record<string, string>> = {
   AGENT: 'Agent-readiness',
 };
 
+/**
+ * Axes whose findings must be read with a stated caveat.
+ *
+ * AGENT is here because spec §5.1 requires it: "se reporta con su propio nivel,
+ * declarando explicitamente que su impacto no esta probado". The caveat is
+ * rendered on the axis card *and* in the axis section, so a reader who only
+ * skims the grid still gets it, and it cannot be lost by scrolling past the
+ * disclaimer block at the top.
+ */
+const AXIS_CAVEAT: Readonly<Record<string, string>> = {
+  AGENT:
+    'Impacto no probado. Este eje no se combina con ningun otro y su puntaje no debe leerse como un factor de posicionamiento demostrado: llms.txt, por ejemplo, esta clasificado por Google como mito.',
+};
+
 const SEVERITY_LABEL: Readonly<Record<Severity, string>> = {
   critical: 'Critico',
   high: 'Alto',
@@ -145,6 +159,11 @@ function axisCard(axis: AxisSummary): string {
     ? `<p class="probe-failed">Probe no disponible: ${escapeHtml(axis.probe.error ?? 'error desconocido')}</p>`
     : '';
 
+  const caveat =
+    AXIS_CAVEAT[axis.axis] === undefined
+      ? ''
+      : '<span class="axis-caveat">Impacto no probado</span>';
+
   return [
     `<a class="axis-card ${state}" href="#axis-${escapeHtml(axis.axis)}">`,
     `<span class="axis-name">${escapeHtml(axisLabel(axis.axis))}</span>`,
@@ -154,6 +173,7 @@ function axisCard(axis: AxisSummary): string {
     axis.probe.notes.length === 0
       ? ''
       : `<span class="axis-note limited">Cobertura parcial (${axis.probe.notes.length})</span>`,
+    caveat,
     probe,
     '</a>',
   ].join('');
@@ -238,6 +258,9 @@ function axisSection(axis: AxisSummary): string {
           findingList(axis.lowConfidence, ''),
         ].join('');
 
+  const caveatText = AXIS_CAVEAT[axis.axis];
+  const caveat = caveatText === undefined ? '' : `<p class="caveat">${escapeHtml(caveatText)}</p>`;
+
   return [
     `<section class="axis" id="axis-${escapeHtml(axis.axis)}">`,
     '<header class="axis-header">',
@@ -246,6 +269,7 @@ function axisSection(axis: AxisSummary): string {
       ? '<p class="axis-score-inline unmeasured">sin medir</p>'
       : `<p class="axis-score-inline">${axis.score}<small>/${axis.maxScore}</small></p>`,
     '</header>',
+    caveat,
     toolLine(axis),
     coverageSection(axis),
     deductionTable(axis),
@@ -326,6 +350,8 @@ a{color:var(--accent)}
 .axis-meta{font-size:12px;color:var(--dim)}
 .probe-failed{font-size:12px;color:var(--medium);margin:4px 0 0}
 .axis-note.limited{color:var(--medium)}
+.axis-caveat{font-size:11px;color:var(--medium);border:1px solid var(--medium);border-radius:999px;padding:1px 7px;align-self:flex-start;margin-top:4px}
+.caveat{background:var(--panel);border:1px solid var(--medium);border-left:3px solid var(--medium);border-radius:8px;padding:10px 14px;margin:0 0 12px;color:var(--dim);font-size:13px}
 .coverage{border:1px solid var(--line);border-left:3px solid var(--medium);border-radius:8px;background:var(--panel);padding:10px 16px;margin:0 0 14px}
 .coverage h3{margin:0 0 4px}
 .coverage ul{margin:0;padding-left:18px}

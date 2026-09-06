@@ -6,7 +6,7 @@
  * got — so "is the SEC number real?" is answered by reading one file instead of
  * grepping the orchestrator. Keeping the choice here also keeps the
  * orchestrator free of any knowledge about Chrome, Lighthouse, axe, testssl,
- * lychee or retire.js.
+ * lychee, retire.js or robots.txt.
  *
  * Every axis in the catalogue now has a real probe, but the fixture fallback
  * stays: it is what keeps `report.html` complete and the pipeline exercised end
@@ -17,6 +17,7 @@
 import type { Axis } from '../catalog/index.ts';
 import { AXES } from '../catalog/index.ts';
 import { a11yProbe } from './a11y/index.ts';
+import { agentProbe } from './agent/index.ts';
 import { depsProbe } from './deps/index.ts';
 import { lighthouseProbe } from './perf/index.ts';
 import type { Probe } from './probe.ts';
@@ -43,6 +44,7 @@ const REAL_PROBES: Readonly<Partial<Record<Axis, (options: ProbeRegistryOptions)
   SEO: () => seoProbe(),
   SEC: (options) => securityProbe(options.security),
   DEPS: () => depsProbe(),
+  AGENT: () => agentProbe(),
 };
 
 /** Axes whose probe measures the real site, in catalogue order. */
