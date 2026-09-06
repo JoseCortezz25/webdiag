@@ -46,12 +46,12 @@ function messageOf(cause: unknown): string {
 /**
  * Runs one probe and contains its failure to that probe's axis.
  *
- * On success the version recorded is the document's, not the probe's declared
- * one. A probe can only *declare* the versions it intends to use — the pinned
- * Lighthouse, the pinned Chrome — but what belongs in `meta.json` is what
- * actually ran, and only the finished document knows that. On failure there is
- * no document, so the declared version is the honest answer to "what would have
- * measured this".
+ * On success the tool identity comes from the raw document, not from
+ * `probe.tool`: a probe that drives an external binary only learns its exact
+ * version by running it, and spec §6 wants the version that actually measured
+ * — "cada herramienta, incluida la de Chrome". `probe.tool` is the declared
+ * identity and is what a failed outcome reports, because at that point nothing
+ * ran and there is no better answer.
  */
 export async function runProbe(probe: Probe, context: ProbeContext): Promise<ProbeOutcome> {
   try {

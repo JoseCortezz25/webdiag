@@ -9,17 +9,24 @@ their output against a stable findings catalog, and emits machine-readable JSON 
 self-contained HTML report. It runs without AI and is usable in CI. Interpreting the
 findings for a specific client is the job of a separate Claude skill, not of this CLI.
 
-> **Status: phase 0 — skeleton with fixture data.** The whole pipeline runs end to end
-> (orchestrator → probe → normalizer → report), but the only probe that exists is a stub
-> that returns fixed data. `webdiag scan` writes every artifact of the real contract and
-> the numbers in them are **invented**. Real probes land in phase 1; until then the report
-> is for validating the flow and the design, not for sending to a client.
+> **Status: phase 1 — the first real probe.** Accessibility is measured for real:
+> `A11Y` runs [axe-core](https://github.com/dequelabs/axe-core) against the page as
+> Chrome renders it. The other five axes are still backed by the phase 0 fixture and
+> their numbers are **invented**. `meta.json` names the tool per axis, so a fixture is
+> never mistaken for a measurement: look for `webdiag-stub` there before quoting a
+> number to anyone.
 
 ## Requirements
 
 - [Bun](https://bun.sh) `>= 1.2` (developed against 1.3.11)
+- Chrome, downloaded automatically by `bun install` (Puppeteer's own build). The
+  accessibility probe needs a real rendering engine; nothing else does yet.
 
 No Node.js or npm required.
+
+Chrome's sandbox is left on, because the probe renders untrusted third-party pages.
+Containers that cannot create the user namespace it needs can opt out explicitly with
+`WEBDIAG_CHROME_NO_SANDBOX=1`.
 
 ## Installation
 
@@ -141,7 +148,14 @@ never deducted.
 │   └── scan/                  The pipeline
 │       ├── args.ts            Parses `scan` flags into a request
 │       ├── probe.ts           Probe contract; a probe failure never ends the run
+│       ├── probes.ts          Which probe runs for which axis: real, or still fixture
 │       ├── stub-probe.ts      Phase 0 probe: fixed data, no network, no external tool
+│       ├── a11y/              The accessibility probe (axe-core in headless Chrome)
+│       │   ├── axe.ts             The axe payload, validated at the browser boundary
+│       │   ├── mapping.ts         axe rule IDs → catalog IDs, as data
+│       │   ├── adapter.ts         axe report → raw observations; pure, no browser
+│       │   ├── browser-runner.ts  The only part that launches Chrome
+│       │   └── probe.ts           Wiring, and the tool identity written to meta.json
 │       ├── raw.ts             `webdiag.raw/1`, the intermediate format probes emit
 │       ├── normalize.ts       Raw → findings: catalog admission, merge, stable order
 │       ├── summary.ts         Builds `summary.json`, the agent layer's only input
@@ -166,6 +180,12 @@ Design rules the code enforces rather than documents:
   confined to `meta.json`, so two runs over the same data produce identical bytes.
 - **No probe failure ends a run.** A probe that throws is recorded as `failed` for its
   axis; the other five axes still produce a report.
+- **A clean automated pass is never reported as a clean site.** Every accessibility run
+  emits `A11Y-MANUAL-REVIEW-PENDING`, because roughly 43% of WCAG criteria need human
+  judgement and no tool covers them. Its evidence lists what axe could not settle.
+- **The probe never decides severity.** Observations carry no severity, so the catalog
+  stays the only authority: `A11Y-FORM-LABEL-MISSING` is `high`, and
+  `A11Y-BUTTON-NAME-MISSING` is a blocking `critical` that zeroes the axis.
 
 ## Continuous integration
 

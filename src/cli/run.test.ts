@@ -16,7 +16,11 @@ function makeOutput(): CliOutput & { out: string[]; err: string[] } {
   };
 }
 
-/** Keeps `runCli` off the real filesystem while still exercising the dispatch. */
+/**
+ * Keeps `runCli` off the real filesystem *and* off the network while still
+ * exercising the dispatch. The default probe set launches Chrome (spec §8,
+ * phase 1); a CLI test asserts routing, not accessibility.
+ */
 function memoryWriter(): ArtifactWriter & { files: Map<string, string> } {
   const files = new Map<string, string>();
 
@@ -90,7 +94,7 @@ describe('runCli', () => {
   });
 
   test('rejects a scan invocation without a URL', async () => {
-    const code = await runCli(['scan'], io, { writer: memoryWriter() });
+    const code = await runCli(['scan'], io, { writer: memoryWriter(), probes: stubProbes() });
 
     expect(code).toBe(EXIT.USAGE);
     expect(io.err.join('\n')).toContain('scan requires a URL');

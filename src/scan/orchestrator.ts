@@ -44,7 +44,7 @@ export type ArtifactWriter = {
 };
 
 export type ScanOptions = {
-  /** Injected so tests can drive a failing or partial probe set. */
+  /** Injected so tests can drive a fixture, a failing probe or a partial set. */
   readonly probes?: readonly Probe[];
   /** Injected so `meta.json` is assertable. */
   readonly clock?: () => Date;

@@ -40,13 +40,14 @@ describe('webdiag executable', () => {
 });
 
 /**
- * Performance is excluded on purpose. Since phase 1 that axis drives a real
- * headless Chrome against a real network, so its numbers legitimately differ
- * between two runs — asserting byte equality on it would be asserting that the
- * internet is deterministic. The determinism contract is about the normalizer,
- * and the fixture axes exercise it end to end through a real process.
+ * PERF and A11Y are excluded on purpose: both drive a real headless Chrome over
+ * a real network, so their numbers legitimately differ between two runs, and
+ * asserting byte equality on them would be asserting that the internet is
+ * deterministic. Each has its own probe test against a local server. The
+ * determinism contract is about the normalizer, and the remaining axes exercise
+ * it end to end through a real process.
  */
-const DETERMINISTIC_AXES = 'SEO,A11Y,DEPS,SEC,AGENT';
+const DETERMINISTIC_AXES = 'SEO,DEPS,SEC,AGENT';
 
 describe('webdiag scan (end to end)', () => {
   const outDir = `${process.env.TMPDIR ?? '/tmp'}/webdiag-cli-e2e-${process.pid}`;

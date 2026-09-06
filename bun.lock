@@ -6,8 +6,10 @@
       "name": "webdiag",
       "dependencies": {
         "@puppeteer/browsers": "3.2.2",
+        "axe-core": "4.13.0",
         "chrome-launcher": "1.2.1",
         "lighthouse": "13.4.1",
+        "puppeteer": "25.10.0",
         "zod": "4.5.4",
       },
       "devDependencies": {
@@ -17,6 +19,9 @@
       },
     },
   },
+  "trustedDependencies": [
+    "puppeteer",
+  ],
   "packages": {
     "@biomejs/biome": ["@biomejs/biome@2.5.12", "https://omc-075263945110.d.codeartifact.us-east-1.amazonaws.com/npm/omc-design-system/@biomejs/biome/-/biome-2.5.12.tgz", { "optionalDependencies": { "@biomejs/cli-darwin-arm64": "2.5.12", "@biomejs/cli-darwin-x64": "2.5.12", "@biomejs/cli-linux-arm64": "2.5.12", "@biomejs/cli-linux-arm64-musl": "2.5.12", "@biomejs/cli-linux-x64": "2.5.12", "@biomejs/cli-linux-x64-musl": "2.5.12", "@biomejs/cli-win32-arm64": "2.5.12", "@biomejs/cli-win32-x64": "2.5.12" }, "bin": { "biome": "bin/biome" } }, "sha512-Lw4VHZRebrReBBnlHa12JQjnIBm3JJAA55PDB9LbBVBF0q4RYphm6KfmIjqtPhf61MxZ5Q9KoK8R8x+7per5Aw=="],
 
@@ -162,6 +167,8 @@
 
     "lighthouse-stack-packs": ["lighthouse-stack-packs@1.12.3", "https://omc-075263945110.d.codeartifact.us-east-1.amazonaws.com/npm/omc-design-system/lighthouse-stack-packs/-/lighthouse-stack-packs-1.12.3.tgz", {}, "sha512-d8IsOpE83kbANgnM+Tp8+x6HcMpX9o2ITBiUERssgzAIFdZCQzs/f4k6D0DLQTE59enml9mbAOU52Wu35exWtg=="],
 
+    "lilconfig": ["lilconfig@3.1.3", "https://omc-075263945110.d.codeartifact.us-east-1.amazonaws.com/npm/omc-design-system/lilconfig/-/lilconfig-3.1.3.tgz", {}, "sha512-/vlFKAoH5Cgt3Ie+JLhRbwOsCQePABiU3tJ1egGvyQ+33R/vcwM2Zl2QR/LzjsBeItPt3oSVXapn+m4nQDvpzw=="],
+
     "lodash-es": ["lodash-es@4.18.1", "https://omc-075263945110.d.codeartifact.us-east-1.amazonaws.com/npm/omc-design-system/lodash-es/-/lodash-es-4.18.1.tgz", {}, "sha512-J8xewKD/Gk22OZbhpOVSwcs60zhd95ESDwezOFuA3/099925PdHJ7OFHNTGtajL3AlZkykD32HykiMo+BIBI8A=="],
 
     "lookup-closest-locale": ["lookup-closest-locale@6.2.0", "https://omc-075263945110.d.codeartifact.us-east-1.amazonaws.com/npm/omc-design-system/lookup-closest-locale/-/lookup-closest-locale-6.2.0.tgz", {}, "sha512-/c2kL+Vnp1jnV6K6RpDTHK3dgg0Tu2VVp+elEiJpjfS1UyY7AjOYHohRug6wT0OpoX2qFgNORndE9RqesfVxWQ=="],
@@ -177,6 +184,8 @@
     "ms": ["ms@2.1.3", "https://omc-075263945110.d.codeartifact.us-east-1.amazonaws.com/npm/omc-design-system/ms/-/ms-2.1.3.tgz", {}, "sha512-6FlzubTLZG3J2a/NVCAleEhjzq5oxgHyaCU9yYXvcLsvoVaHJq/s5xXI6/XXP6tz7R9xAOtHnSO/tXtF3WRTlA=="],
 
     "open": ["open@8.4.2", "https://omc-075263945110.d.codeartifact.us-east-1.amazonaws.com/npm/omc-design-system/open/-/open-8.4.2.tgz", { "dependencies": { "define-lazy-prop": "^2.0.0", "is-docker": "^2.1.1", "is-wsl": "^2.2.0" } }, "sha512-7x81NCL719oNbsq/3mh+hVrAWmFuEYUqrq/Iw3kUzH8ReypT9QQ0BLoJS7/G9k6N81XjW4qHWtjWwe/9eLy1EQ=="],
+
+    "puppeteer": ["puppeteer@25.10.0", "https://omc-075263945110.d.codeartifact.us-east-1.amazonaws.com/npm/omc-design-system/puppeteer/-/puppeteer-25.10.0.tgz", { "dependencies": { "@puppeteer/browsers": "3.2.2", "chromium-bidi": "17.0.2", "devtools-protocol": "0.0.1666840", "lilconfig": "^3.1.3", "puppeteer-core": "25.10.0", "typed-query-selector": "^2.12.2" }, "bin": { "puppeteer": "lib/puppeteer/node/cli.js" } }, "sha512-9ZfkiaZDQWpGPJp9XTS+Bkn/D78hPvYmtjPfIBeybn05oeY6Jj7aiSbYdfcSQD2UMvC0vE7Yi9PSDo179euRzw=="],
 
     "puppeteer-core": ["puppeteer-core@25.10.0", "https://omc-075263945110.d.codeartifact.us-east-1.amazonaws.com/npm/omc-design-system/puppeteer-core/-/puppeteer-core-25.10.0.tgz", { "dependencies": { "@puppeteer/browsers": "3.2.2", "chromium-bidi": "17.0.2", "devtools-protocol": "0.0.1666840", "typed-query-selector": "^2.12.2", "webdriver-bidi-protocol": "0.4.3", "ws": "^8.21.3" } }, "sha512-Hy5eMQshOEMil4JUUx03h5pw1HYkYCso1RG/gcpPlFSd4cYPOcopxcXEAxpLPOkOPJb9LIJtwxuj66bSdvknFg=="],
 
@@ -239,6 +248,8 @@
     "cliui/strip-ansi": ["strip-ansi@7.2.0", "https://omc-075263945110.d.codeartifact.us-east-1.amazonaws.com/npm/omc-design-system/strip-ansi/-/strip-ansi-7.2.0.tgz", { "dependencies": { "ansi-regex": "^6.2.2" } }, "sha512-yDPMNjp4WyfYBkHnjIRLfca1i6KMyGCtsVgoKe/z1+6vukgaENdgGBZt+ZmKPc4gavvEZ5OgHfHdrazhgNyG7w=="],
 
     "lighthouse/yargs": ["yargs@17.7.3", "https://omc-075263945110.d.codeartifact.us-east-1.amazonaws.com/npm/omc-design-system/yargs/-/yargs-17.7.3.tgz", { "dependencies": { "cliui": "^8.0.1", "escalade": "^3.1.1", "get-caller-file": "^2.0.5", "require-directory": "^2.1.1", "string-width": "^4.2.3", "y18n": "^5.0.5", "yargs-parser": "^21.1.1" } }, "sha512-GZtjxm/J/4TSxuL3FNYjCmLktBTnIw/rVmKSIyKeYAZpmJB2ig9VauCC5xsa82GNKVKDAqpOn3KVzNt0zmrU0g=="],
+
+    "puppeteer/devtools-protocol": ["devtools-protocol@0.0.1666840", "https://omc-075263945110.d.codeartifact.us-east-1.amazonaws.com/npm/omc-design-system/devtools-protocol/-/devtools-protocol-0.0.1666840.tgz", {}, "sha512-gCcO42XCHKEs7Ag0S7aGYsnJ7hlgrO3qderYqeiY0Eqk+0GFfuvT13IA0hHreJTa2KCdDVyGMeOhdMNmrrTjVg=="],
 
     "puppeteer-core/devtools-protocol": ["devtools-protocol@0.0.1666840", "https://omc-075263945110.d.codeartifact.us-east-1.amazonaws.com/npm/omc-design-system/devtools-protocol/-/devtools-protocol-0.0.1666840.tgz", {}, "sha512-gCcO42XCHKEs7Ag0S7aGYsnJ7hlgrO3qderYqeiY0Eqk+0GFfuvT13IA0hHreJTa2KCdDVyGMeOhdMNmrrTjVg=="],
 
