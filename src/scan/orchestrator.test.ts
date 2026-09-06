@@ -34,11 +34,17 @@ const REQUEST: ScanRequest = {
 
 const FIXED_CLOCK = () => new Date('2026-09-06T12:00:00.000Z');
 
-async function scan(overrides: Partial<ScanRequest> = {}, probes?: readonly Probe[]) {
+/**
+ * These tests are about the orchestrator, not about any one axis, so they always
+ * run against the fixture probes. Leaving them on `defaultProbes()` would put a
+ * live SEO fetch inside a unit test and make the assertions depend on whatever
+ * example.com answers today.
+ */
+async function scan(overrides: Partial<ScanRequest> = {}, probes: readonly Probe[] = stubProbes()) {
   const writer = memoryWriter();
   const result = await runScan(
     { ...REQUEST, ...overrides },
-    { writer, clock: FIXED_CLOCK, ...(probes === undefined ? {} : { probes }) },
+    { writer, clock: FIXED_CLOCK, probes },
   );
 
   return { writer, result };

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, test } from 'bun:test';
-import type { ArtifactWriter } from '../scan/index.ts';
+import { type ArtifactWriter, stubProbes } from '../scan/index.ts';
 import { COMMANDS } from './commands.ts';
 import { EXIT } from './exit-codes.ts';
 import { type CliOutput, runCli } from './run.ts';
@@ -94,8 +94,11 @@ describe('runCli', () => {
   });
 
   test('reports a per-axis score line and never a composite one', async () => {
+    // The fixture probes keep this test about the CLI's output format. The real
+    // SEO probe would reach the network and score whatever it found there.
     await runCli(['scan', 'https://example.com', '--out', '/tmp/x'], io, {
       writer: memoryWriter(),
+      probes: stubProbes(),
     });
     const stdout = io.out.join('\n');
 

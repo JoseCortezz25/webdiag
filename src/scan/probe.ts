@@ -43,14 +43,25 @@ function messageOf(cause: unknown): string {
   return cause instanceof Error ? cause.message : String(cause);
 }
 
-/** Runs one probe and contains its failure to that probe's axis. */
+/**
+ * Runs one probe and contains its failure to that probe's axis.
+ *
+ * On success the *document's* tool wins over the probe's declared one. A probe
+ * cannot always know its own version before it runs: the SEO axis shells out to
+ * lychee and xmllint and only learns their versions mid-run. Spec §6 wants those
+ * in `meta.json`, so the resolved identity is the one that is recorded. A failed
+ * probe keeps its static declaration, which is the honest answer — at that point
+ * no external tool contributed anything.
+ */
 export async function runProbe(probe: Probe, context: ProbeContext): Promise<ProbeOutcome> {
   try {
+    const raw = await probe.run(context);
+
     return {
       status: 'ok',
       axis: probe.axis,
-      tool: probe.tool,
-      raw: await probe.run(context),
+      tool: raw.tool,
+      raw,
     };
   } catch (cause) {
     return {
