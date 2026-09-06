@@ -20,6 +20,7 @@ import { a11yProbe } from './a11y/index.ts';
 import { lighthouseProbe } from './perf/index.ts';
 import type { Probe } from './probe.ts';
 import { type SecurityProbeOptions, securityProbe } from './sec/index.ts';
+import { seoProbe } from './seo/index.ts';
 import { stubProbe } from './stub-probe.ts';
 
 /**
@@ -38,6 +39,7 @@ export type ProbeRegistryOptions = {
 const REAL_PROBES: Readonly<Partial<Record<Axis, (options: ProbeRegistryOptions) => Probe>>> = {
   PERF: () => lighthouseProbe(),
   A11Y: () => a11yProbe(),
+  SEO: () => seoProbe(),
   SEC: (options) => securityProbe(options.security),
 };
 

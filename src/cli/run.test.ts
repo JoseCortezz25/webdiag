@@ -103,6 +103,8 @@ describe('runCli', () => {
   });
 
   test('reports a per-axis score line and never a composite one', async () => {
+    // The fixture probes keep this test about the CLI's output format. The real
+    // SEO probe would reach the network and score whatever it found there.
     await runCli(['scan', 'https://example.com', '--out', '/tmp/x'], io, {
       writer: memoryWriter(),
       probes: stubProbes(),

@@ -69,6 +69,28 @@ export {
   securityProbe,
   userAgent,
 } from './sec/index.ts';
+export {
+  BUDGET,
+  type CanonicalTarget,
+  type CollectOptions,
+  checkLinks,
+  collect,
+  type FetchTrace,
+  inspectSitemap,
+  type LinkReport,
+  type PageDocument,
+  parsePage,
+  parseRobots,
+  type RobotsFile,
+  SEO_TOOL,
+  type SeoAnalysis,
+  type SeoCollector,
+  type SitemapReport,
+  seoProbe,
+  toObservations as toSeoObservations,
+  traceUrl,
+  verdictFor,
+} from './seo/index.ts';
 export { STUB_TOOL, stubProbe, stubProbes } from './stub-probe.ts';
 export {
   type AxisSummary,

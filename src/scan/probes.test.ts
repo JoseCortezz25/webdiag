@@ -4,12 +4,14 @@ import { AXE_TOOL } from './a11y/index.ts';
 import { PINNED_PERF_TOOL } from './perf/index.ts';
 import { defaultProbes, probeFor, REAL_PROBE_AXES } from './probes.ts';
 import { SECURITY_TOOL_NAME } from './sec/index.ts';
+import { SEO_TOOL } from './seo/index.ts';
 import { STUB_TOOL } from './stub-probe.ts';
 
 /** The tool name each measured axis must answer with. */
 const REAL_TOOL_NAME: Partial<Record<(typeof AXES)[number], string>> = {
   PERF: PINNED_PERF_TOOL.name,
   A11Y: AXE_TOOL.name,
+  SEO: SEO_TOOL.name,
   SEC: SECURITY_TOOL_NAME,
 };
 
