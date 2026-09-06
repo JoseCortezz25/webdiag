@@ -3,6 +3,8 @@
 **Versión del catálogo:** 1.0.0
 **Regla de oro:** los IDs son un contrato. Una vez publicado un ID, nunca cambia de significado. Si un check evoluciona, se crea un ID nuevo y el viejo se marca `deprecated`. Sin esto se pierde la comparabilidad histórica, que es el activo del sistema.
 
+**Actualización 2026-09-06** (pre-implementación, sin corridas históricas que romper): `A11Y-FORM-LABEL-MISSING` reclasificado de `critical`/*blocking* a `high` (ver §4); resuelta la deduplicación entre ejes y la política de `confidence: low` (ver §5). No hay score agregado entre ejes — cada eje se puntúa de forma independiente.
+
 ---
 
 ## 1. Convención de IDs
@@ -91,11 +93,11 @@ Mayúsculas, guiones, sin números correlativos. `SEO-CANONICAL-CHAIN` se lee so
 |---|---|---|---|
 | `A11Y-CONTRAST-INSUFFICIENT` | M | high | Contraste por debajo de WCAG AA |
 | `A11Y-IMG-ALT-MISSING` | M | high | Imágenes sin atributo alt |
-| `A11Y-FORM-LABEL-MISSING` | M | critical 🚫 | Campos de formulario sin etiqueta accesible |
+| `A11Y-FORM-LABEL-MISSING` | M | high | Campos de formulario sin etiqueta accesible |
 | `A11Y-BUTTON-NAME-MISSING` | M | critical 🚫 | Botones o enlaces sin nombre accesible |
 | `A11Y-LANG-MISSING` | M | medium | `<html>` sin atributo lang o con valor inválido |
 | `A11Y-HEADING-ORDER` | M | medium | Saltos en la jerarquía de encabezados |
-| `A11Y-LANDMARKS-MISSING` | M | medium | Sin landmarks o regiones (compartido con AGENT) |
+| `A11Y-LANDMARKS-MISSING` | M | medium | Sin landmarks o regiones (eje dueño: A11Y; mención informativa en AGENT, sin restar ahí) |
 | `A11Y-ARIA-INVALID` | M | high | Roles o atributos ARIA mal usados |
 | `A11Y-KEYBOARD-TRAP` | 4 | critical 🚫 | Foco que no se puede sacar con teclado |
 | `A11Y-FOCUS-NOT-VISIBLE` | 4 | high | Indicador de foco ausente o invisible |
@@ -156,7 +158,7 @@ Mayúsculas, guiones, sin números correlativos. `SEO-CANONICAL-CHAIN` se lee so
 | `DEPS-LIB-DEPRECATED` | 3 | high | Paquete marcado como deprecated en npm |
 | `DEPS-LIB-UNMAINTAINED` | 3 | medium | Sin publicaciones ni actividad en el repo (OpenSSF Scorecard) |
 | `DEPS-RUNTIME-EOL` | 3 | high | Runtime o framework fuera de soporte (endoflife.date) |
-| `DEPS-SOURCEMAP-EXPOSED` | 2 | medium | Sourcemaps públicos en producción (también es hallazgo de SEC) |
+| `DEPS-SOURCEMAP-EXPOSED` | 2 | medium | Sourcemaps públicos en producción (eje dueño: DEPS; mención informativa en SEC, sin restar ahí) |
 | `DEPS-VERSION-UNDETERMINED` | 2 | info | Se detectó la librería pero no la versión: el análisis black-box es parcial |
 
 > `DEPS-VERSION-UNDETERMINED` es obligatorio en modo black-box. Es lo que evita que el cliente lea "0 vulnerabilidades" como "está limpio" cuando en realidad significa "no pudimos ver".
@@ -187,15 +189,15 @@ Peso bajo en el score global (5–10%) por impacto no probado. El reporte debe d
 | `AGENT-STRUCTURED-DATA-MISSING` | 2 | low | Sin JSON-LD que declare entidades |
 | `AGENT-LLMSTXT-MISSING` | 2 | low | Sin llms.txt — higiene, no factor probado |
 | `AGENT-WELLKNOWN-MISSING` | 2 | low | Sin endpoints en /.well-known/ |
-| `AGENT-SEMANTICS-POOR` | 2 | medium | Sin landmarks ni nombres accesibles: un agente no puede operar el sitio |
+| `AGENT-SEMANTICS-POOR` | 2 | medium | Sin landmarks ni nombres accesibles: un agente no puede operar el sitio (si el único motivo es ausencia de landmarks, ese punto ya lo puntuó A11Y-LANDMARKS-MISSING; aquí no se resta de nuevo por eso solo) |
 
 > `AGENT-AI-BOTS-BLOCKED` se reporta como `info`, nunca como problema. Bloquear crawlers de IA es una decisión de negocio legítima y no nos toca opinar sin contexto.
 
 ---
 
-## 5. Lo que falta decidir
+## 5. Decisiones y lo que falta
 
-1. **Umbrales exactos** de cada check numérico (TTFB, tamaño de bundle, profundidad de clic). Salen de la calibración contra los tres sitios de referencia, no de inventarlos ahora.
-2. **Pesos finales** por eje. Propuesta de partida: PERF 20 / SEO 20 / SEC 20 / A11Y 18 / DEPS 17 / AGENT 5.
-3. **Qué hacer con `confidence: low`**: listarlos aparte o esconderlos por defecto en el reporte de cliente.
-4. **Deduplicación entre ejes**: `DEPS-SOURCEMAP-EXPOSED` y los landmarks aparecen en dos ejes. Decidir si se cuentan dos veces en el score o se asigna un eje dueño.
+1. **Umbrales exactos** de cada check numérico (TTFB, tamaño de bundle, profundidad de clic). Siguen abiertos: salen de la calibración contra los tres sitios de referencia (tickets #8 y #12 en GitHub), no se inventan ahora.
+2. ~~Pesos finales por eje~~ — **Resuelto (2026-09-06):** no existe score agregado entre ejes. Cada eje (PERF/SEO/SEC/A11Y/DEPS/AGENT) se puntúa y reporta de forma independiente; no se combinan con pesos en una métrica general.
+3. ~~Qué hacer con `confidence: low`~~ — **Resuelto:** se listan aparte en una sección de baja confianza en el reporte de cliente; nunca se ocultan por defecto.
+4. ~~Deduplicación entre ejes~~ — **Resuelto:** cada hallazgo compartido tiene un eje dueño único que lo puntúa; el otro eje lo menciona informativamente sin restar. `DEPS-SOURCEMAP-EXPOSED` → dueño DEPS. Landmarks (`A11Y-LANDMARKS-MISSING`) → dueño A11Y.

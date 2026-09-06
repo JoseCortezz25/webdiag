@@ -1,7 +1,8 @@
 # Spec — Sistema de diagnóstico técnico automatizado de sitios web
 
-**Estado:** propuesta, pendiente de aprobación
+**Estado:** aprobada con ajustes (ver §10) — en implementación, tickets publicados en GitHub
 **Fecha:** 2026-09-05
+**Última actualización:** 2026-09-06 — resueltas las decisiones abiertas de pesos, dedup, confidence y el hallazgo A11Y-FORM-LABEL-MISSING
 **Origen:** síntesis de conversación de diseño + informe de investigación previo
 
 ---
@@ -80,16 +81,18 @@ Salida en `DIR/`: `raw/`, `findings.json`, `summary.json`, `report.html`, `meta.
 
 ### 5.1 Ejes (6)
 
-| Eje | Herramientas | Peso propuesto |
-|---|---|---|
-| Performance | Lighthouse, CrUX (opcional) | 20% |
-| SEO técnico | probe propio, lychee, xmllint | 20% |
-| Seguridad | testssl.sh, headers vía curl | 20% |
-| Accesibilidad | axe-core | 18% |
-| Dependencias | retire.js (BB), osv-scanner + Syft (WB) | 17% |
-| Agent-readiness | probe propio | 5% |
+**Decisión (2026-09-06): sin score agregado entre ejes.** Cada eje se evalúa y reporta de forma independiente, con su propio puntaje calculado a partir de las deducciones por severidad del catálogo y la regla de override aplicada por eje (§6). No existe un número compuesto que combine los seis ejes con pesos.
 
-Agent-readiness va con peso bajo por impacto no probado (Google clasifica llms.txt como mito). El reporte debe declararlo explícitamente.
+| Eje | Herramientas |
+|---|---|
+| Performance | Lighthouse, CrUX (opcional) |
+| SEO técnico | probe propio, lychee, xmllint |
+| Seguridad | testssl.sh, headers vía curl |
+| Accesibilidad | axe-core |
+| Dependencias | retire.js (BB), osv-scanner + Syft (WB) |
+| Agent-readiness | probe propio |
+
+Agent-readiness no se combina en ningún compuesto; se reporta con su propio nivel, declarando explícitamente que su impacto no está probado (Google clasifica llms.txt como mito).
 
 ### 5.2 Modos
 
@@ -114,7 +117,7 @@ Puntos no negociables:
 
 ### Regla de override
 
-Un hallazgo `critical` marcado *blocking* (11 en total) fija el eje en **0** y sube a portada, sin promediar. Motivo: un promedio ponderado daría 71 y enterraría el único hallazgo que importaba (ej. `noindex` en producción).
+Un hallazgo `critical` marcado *blocking* (10 en total, ver catálogo) fija el eje en **0** y sube a portada, sin promediar. Motivo: un promedio ponderado daría 71 y enterraría el único hallazgo que importaba (ej. `noindex` en producción).
 
 ---
 
@@ -177,8 +180,8 @@ Screenshots evaluados por el agente: calidad de alt text, contraste en hover/foc
 
 ## 10. Abierto
 
-1. Umbrales numéricos exactos (TTFB, tamaño de bundle, profundidad de clic) → salen de la calibración.
-2. Pesos finales por eje → propuesta en §5.1, a validar.
-3. Revisión uno a uno de los 11 hallazgos *blocking*. `SEO-NOINDEX-UNINTENDED` es indiscutible; `A11Y-FORM-LABEL-MISSING` es discutible.
-4. Deduplicación entre ejes: `DEPS-SOURCEMAP-EXPOSED` y los landmarks aparecen en dos ejes. Definir eje dueño o doble conteo.
-5. Qué hacer con `confidence: low` en el reporte de cliente: listar aparte u ocultar por defecto.
+1. Umbrales numéricos exactos (TTFB, tamaño de bundle, profundidad de clic) → siguen abiertos, salen de la calibración contra sitios reales (tickets #8 y #12 en GitHub).
+2. ~~Pesos finales por eje~~ — **Resuelto (2026-09-06):** no hay pesos ni score agregado entre ejes; ver §5.1.
+3. ~~Revisión de los hallazgos *blocking*~~ — **Resuelto:** `A11Y-FORM-LABEL-MISSING` baja a `high` (ya no es *blocking*); quedan 10 hallazgos *blocking* (ver catálogo §4). El resto no se objetó.
+4. ~~Deduplicación entre ejes~~ — **Resuelto:** eje dueño único por hallazgo compartido (`DEPS-SOURCEMAP-EXPOSED` → DEPS; landmarks → A11Y); el otro eje lo menciona informativamente sin restar ahí.
+5. ~~Qué hacer con `confidence: low`~~ — **Resuelto:** se listan aparte en el reporte de cliente, nunca se ocultan.
