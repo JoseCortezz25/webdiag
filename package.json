@@ -21,6 +21,7 @@
   "scripts": {
     "build": "bun build ./src/cli.ts --outdir dist --target bun --minify --external lighthouse --external puppeteer --external @puppeteer/browsers --external chrome-launcher --external retire && chmod +x dist/cli.js",
     "install:testssl": "bash scripts/install-testssl.sh",
+    "install:whitebox": "bash scripts/install-whitebox.sh",
     "dev": "bun run ./src/cli.ts",
     "typecheck": "tsc --noEmit",
     "lint": "biome check .",

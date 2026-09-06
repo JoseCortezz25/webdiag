@@ -420,6 +420,13 @@ export const CATALOG_ENTRIES = [
     detects: 'Runtime o framework fuera de soporte (endoflife.date)',
   }),
   defineEntry({
+    id: 'DEPS-LINT-ERRORS',
+    phase: '3',
+    baseSeverity: 'medium',
+    detects: 'Errores de lint detectados por la configuración propia de ESLint del proyecto',
+    note: 'Solo cuenta errores (severity 2). Requiere modo white-box: corre la instalación de ESLint del propio repositorio.',
+  }),
+  defineEntry({
     id: 'DEPS-SOURCEMAP-EXPOSED',
     phase: '2',
     baseSeverity: 'medium',

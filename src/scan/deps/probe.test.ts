@@ -11,9 +11,18 @@ import { cleanAnalysis, depsAnalysis } from './fixture.ts';
 import { depsProbe } from './probe.ts';
 import { RETIRE_TOOL, scanWithRetire } from './retire.ts';
 import { findExposedSourcemaps } from './sourcemaps.ts';
+import {
+  cleanWhiteboxAnalysis,
+  osvGroup,
+  osvPackage,
+  osvReport,
+  osvScan,
+  whiteboxAnalysis,
+} from './whitebox/fixture.ts';
 import { withWorkspace } from './workspace.ts';
 
 const CONTEXT: ProbeContext = { url: 'https://example.test/', mode: 'quick', pages: 1 };
+const WHITEBOX_CONTEXT: ProbeContext = { ...CONTEXT, repo: '/srv/site' };
 
 describe('depsProbe', () => {
   test('writes a raw document the normalizer can read', async () => {
@@ -50,6 +59,95 @@ describe('depsProbe', () => {
     // Nothing ran, so the declared identity is the only honest answer.
     expect(outcome.tool).toEqual(RETIRE_TOOL);
     expect(outcome.status === 'failed' && outcome.error).toContain('ERR_NAME_NOT_RESOLVED');
+  });
+});
+
+describe('depsProbe in white-box mode (context.repo set)', () => {
+  test('routes to the white-box analyzer instead of downloading served bundles', async () => {
+    const probe = depsProbe(
+      () => Promise.reject(new Error('the black-box analyzer must not run')),
+      () => Promise.resolve(cleanWhiteboxAnalysis()),
+    );
+
+    const raw = await probe.run(WHITEBOX_CONTEXT);
+
+    expect(raw.axis).toBe('DEPS');
+    expect(raw.observations).toEqual([]);
+    expect(raw.observations.map((observation) => observation.id)).not.toContain(
+      'DEPS-VERSION-UNDETERMINED',
+    );
+  });
+
+  test('reports osv-scanner as the tool, with Syft and ESLint as components', async () => {
+    const probe = depsProbe(undefined, () =>
+      Promise.resolve(
+        whiteboxAnalysis({
+          osv: osvScan({ version: '2.5.1' }),
+        }),
+      ),
+    );
+
+    const raw = await probe.run(WHITEBOX_CONTEXT);
+
+    expect(raw.tool.name).toBe('osv-scanner');
+    expect(raw.tool.version).toBe('2.5.1');
+    expect(raw.tool.components).toEqual([
+      { name: 'syft', version: '1.51.1' },
+      { name: 'eslint', version: '9.15.0' },
+    ]);
+  });
+
+  test('writes the Syft SBOM as its own artifact', async () => {
+    const probe = depsProbe(undefined, () =>
+      Promise.resolve(
+        whiteboxAnalysis({
+          syft: { ...cleanWhiteboxAnalysis().syft, sbom: '{"bomFormat":"CycloneDX"}' },
+        }),
+      ),
+    );
+
+    const raw = await probe.run(WHITEBOX_CONTEXT);
+
+    expect(raw.artifacts).toEqual({ 'sbom.cdx.json': '{"bomFormat":"CycloneDX"}' });
+  });
+
+  test('carries the analysis notes onto the raw document', async () => {
+    const probe = depsProbe(undefined, () =>
+      Promise.resolve(whiteboxAnalysis({ notes: ['osv-scanner no está instalado.'] })),
+    );
+
+    const raw = await probe.run(WHITEBOX_CONTEXT);
+
+    expect(raw.notes).toEqual(['osv-scanner no está instalado.']);
+  });
+
+  test('a repo path that cannot be read degrades the axis instead of ending the run', async () => {
+    const probe = depsProbe(undefined, () =>
+      Promise.reject(new Error('--repo /nope is not a directory.')),
+    );
+
+    const outcome = await runProbe(probe, WHITEBOX_CONTEXT);
+
+    expect(outcome.status).toBe('failed');
+    expect(outcome.status === 'failed' && outcome.error).toContain(
+      '--repo /nope is not a directory.',
+    );
+  });
+
+  test('a critical vulnerability found by osv-scanner still reaches the raw document', async () => {
+    const probe = depsProbe(undefined, () =>
+      Promise.resolve(
+        whiteboxAnalysis({
+          osv: osvScan({
+            report: osvReport([osvPackage({ groups: [osvGroup({ max_severity: '9.8' })] })]),
+          }),
+        }),
+      ),
+    );
+
+    const raw = await probe.run(WHITEBOX_CONTEXT);
+
+    expect(raw.observations.map((observation) => observation.id)).toContain('DEPS-VULN-CRITICAL');
   });
 });
 

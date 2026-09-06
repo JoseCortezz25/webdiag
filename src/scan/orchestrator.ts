@@ -138,7 +138,15 @@ export async function runScan(
   });
 
   const rawArtifacts = documents.map((document) => joinPath('raw', `${document.axis}.json`));
-  const artifacts = [...rawArtifacts, 'findings.json', 'summary.json', 'meta.json', 'report.html'];
+  const extraArtifacts = documents.flatMap((document) => Object.keys(document.artifacts ?? {}));
+  const artifacts = [
+    ...rawArtifacts,
+    ...extraArtifacts,
+    'findings.json',
+    'summary.json',
+    'meta.json',
+    'report.html',
+  ];
 
   const meta = buildMeta({
     url: request.url,
@@ -156,6 +164,9 @@ export async function runScan(
   const files: readonly (readonly [string, string])[] = [
     ...documents.map(
       (document) => [joinPath('raw', `${document.axis}.json`), encodeJson(document)] as const,
+    ),
+    ...documents.flatMap((document) =>
+      Object.entries(document.artifacts ?? {}).map(([name, contents]) => [name, contents] as const),
     ),
     ['findings.json', encodeJson(findings)] as const,
     ['summary.json', encodeJson(summary)] as const,

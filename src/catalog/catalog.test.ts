@@ -29,7 +29,7 @@ describe('catalog data', () => {
   });
 
   test('holds every ID transcribed from the normative catalog', () => {
-    expect(CATALOG_ENTRIES.length).toBe(82);
+    expect(CATALOG_ENTRIES.length).toBe(83);
   });
 
   test('distributes IDs across the axes as the source tables do', () => {
@@ -37,7 +37,7 @@ describe('catalog data', () => {
       PERF: 11,
       A11Y: 13,
       SEO: 31,
-      DEPS: 11,
+      DEPS: 12,
       SEC: 10,
       AGENT: 6,
     });
