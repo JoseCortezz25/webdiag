@@ -5,7 +5,7 @@ import { runScan } from '../orchestrator.ts';
 import { runProbe } from '../probe.ts';
 import { defaultProbes } from '../probes.ts';
 import { parseRawDocument } from '../raw.ts';
-import { STUB_TOOL } from '../stub-probe.ts';
+import { STUB_TOOL, stubProbes } from '../stub-probe.ts';
 import { PINNED_CHROME_BUILD, type ResolvedChrome } from './chrome.ts';
 import type { FieldData } from './crux.ts';
 import type { LighthouseReport } from './lhr.ts';
@@ -123,7 +123,9 @@ describe('probe isolation', () => {
       run: () => Promise.reject(new Error('page did not paint (NO_FCP)')),
       field: () => Promise.resolve(NO_FIELD),
     });
-    const probes = defaultProbes().map((probe) => (probe.axis === 'PERF' ? broken : probe));
+    // Fixtures stand in for the other axes so this stays a test about isolation
+    // rather than a live scan of five real probes.
+    const probes = stubProbes().map((probe) => (probe.axis === 'PERF' ? broken : probe));
 
     const result = await runScan(
       { url: CONTEXT.url, mode: 'quick', axes: AXES, pages: 1, out: '/out' },
@@ -146,14 +148,14 @@ describe('probe isolation', () => {
 });
 
 describe('defaultProbes', () => {
-  test('Lighthouse owns Performance and the rest are still fixtures', () => {
+  test('Lighthouse owns Performance', () => {
     const probes = defaultProbes();
 
     expect(probes.map((probe) => probe.axis)).toEqual([...AXES]);
 
-    for (const probe of probes) {
-      const expected = probe.axis === 'PERF' ? 'lighthouse' : STUB_TOOL.name;
-      expect(probe.tool.name).toBe(expected);
-    }
+    const perf = probes.find((probe) => probe.axis === 'PERF');
+
+    expect(perf?.tool.name).toBe('lighthouse');
+    expect(perf?.tool.name).not.toBe(STUB_TOOL.name);
   });
 });
