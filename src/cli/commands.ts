@@ -1,9 +1,9 @@
 /**
  * Registry of the CLI surface.
  *
- * The scaffold ships the shape of the interface described in the spec, not its
- * behaviour: every command is `planned` until its own ticket lands. Keeping the
- * registry declarative means `--help` can never drift from what is dispatchable.
+ * A command is `planned` until its own ticket lands, and `available` once it is
+ * dispatchable. Keeping the registry declarative means `--help` can never drift
+ * from what actually runs.
  */
 
 export type CommandStatus = 'planned' | 'available';
@@ -21,7 +21,7 @@ export const COMMANDS: readonly Command[] = [
     usage:
       'webdiag scan <url> [--repo PATH] [--mode quick|deep] [--axes ...] [--pages N] [--out DIR]',
     summary: 'Run a technical diagnostic over a URL and write the report artifacts.',
-    status: 'planned',
+    status: 'available',
   },
 ];
 

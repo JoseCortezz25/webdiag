@@ -1,4 +1,5 @@
-import { describe, expect, test } from 'bun:test';
+import { afterAll, describe, expect, test } from 'bun:test';
+import { rm } from 'node:fs/promises';
 import { EXIT } from './cli/exit-codes.ts';
 
 const ENTRYPOINT = new URL('./cli.ts', import.meta.url).pathname;
@@ -35,5 +36,46 @@ describe('webdiag executable', () => {
     expect(exitCode).toBe(EXIT.USAGE);
     expect(stdout).toBe('');
     expect(stderr).toContain('unknown command');
+  });
+});
+
+describe('webdiag scan (end to end)', () => {
+  const outDir = `${process.env.TMPDIR ?? '/tmp'}/webdiag-cli-e2e-${process.pid}`;
+
+  afterAll(async () => {
+    await rm(outDir, { recursive: true, force: true });
+  });
+
+  test('writes the five artifacts and repeats findings.json byte for byte', async () => {
+    const first = await runProcess([
+      'scan',
+      'https://example.com',
+      '--mode',
+      'quick',
+      '--out',
+      outDir,
+    ]);
+
+    expect(first.exitCode).toBe(EXIT.OK);
+    expect(first.stderr).toBe('');
+
+    for (const artifact of ['findings.json', 'summary.json', 'meta.json', 'report.html']) {
+      expect(await Bun.file(`${outDir}/${artifact}`).exists()).toBe(true);
+    }
+    expect(await Bun.file(`${outDir}/raw/PERF.json`).exists()).toBe(true);
+
+    const findings = await Bun.file(`${outDir}/findings.json`).text();
+
+    const second = await runProcess([
+      'scan',
+      'https://example.com',
+      '--mode',
+      'quick',
+      '--out',
+      outDir,
+    ]);
+
+    expect(second.exitCode).toBe(EXIT.OK);
+    expect(await Bun.file(`${outDir}/findings.json`).text()).toBe(findings);
   });
 });

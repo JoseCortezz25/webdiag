@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, test } from 'bun:test';
+import type { ArtifactWriter } from '../scan/index.ts';
 import { COMMANDS } from './commands.ts';
 import { EXIT } from './exit-codes.ts';
 import { type CliOutput, runCli } from './run.ts';
@@ -15,6 +16,20 @@ function makeOutput(): CliOutput & { out: string[]; err: string[] } {
   };
 }
 
+/** Keeps `runCli` off the real filesystem while still exercising the dispatch. */
+function memoryWriter(): ArtifactWriter & { files: Map<string, string> } {
+  const files = new Map<string, string>();
+
+  return {
+    files,
+    ensureDir: () => Promise.resolve(),
+    writeFile: (path, contents) => {
+      files.set(path, contents);
+      return Promise.resolve();
+    },
+  };
+}
+
 describe('runCli', () => {
   let io: ReturnType<typeof makeOutput>;
 
@@ -22,23 +37,23 @@ describe('runCli', () => {
     io = makeOutput();
   });
 
-  test.each([['--help'], ['-h'], ['help']])('prints help for %s and exits 0', (flag) => {
-    const code = runCli([flag], io);
+  test.each([['--help'], ['-h'], ['help']])('prints help for %s and exits 0', async (flag) => {
+    const code = await runCli([flag], io);
 
     expect(code).toBe(EXIT.OK);
     expect(io.err).toEqual([]);
     expect(io.out.join('\n')).toContain('USAGE');
   });
 
-  test('prints help when invoked with no arguments', () => {
-    const code = runCli([], io);
+  test('prints help when invoked with no arguments', async () => {
+    const code = await runCli([], io);
 
     expect(code).toBe(EXIT.OK);
     expect(io.out.join('\n')).toContain('COMMANDS');
   });
 
-  test('help lists every registered command', () => {
-    runCli(['--help'], io);
+  test('help lists every registered command', async () => {
+    await runCli(['--help'], io);
     const help = io.out.join('\n');
 
     for (const command of COMMANDS) {
@@ -47,26 +62,45 @@ describe('runCli', () => {
     }
   });
 
-  test.each([['--version'], ['-v']])('prints the version for %s', (flag) => {
-    const code = runCli([flag], io);
+  test.each([['--version'], ['-v']])('prints the version for %s', async (flag) => {
+    const code = await runCli([flag], io);
 
     expect(code).toBe(EXIT.OK);
     expect(io.out.join('\n')).toMatch(/^webdiag \d+\.\d+\.\d+$/);
   });
 
-  test('rejects an unknown command with the usage exit code', () => {
-    const code = runCli(['definitely-not-a-command'], io);
+  test('rejects an unknown command with the usage exit code', async () => {
+    const code = await runCli(['definitely-not-a-command'], io);
 
     expect(code).toBe(EXIT.USAGE);
     expect(io.out).toEqual([]);
     expect(io.err.join('\n')).toContain("unknown command 'definitely-not-a-command'");
   });
 
-  test('reports planned commands as not implemented instead of pretending to work', () => {
-    const code = runCli(['scan', 'https://example.com'], io);
+  test('dispatches scan and reports every artifact it wrote', async () => {
+    const writer = memoryWriter();
+    const code = await runCli(['scan', 'https://example.com', '--out', '/tmp/x'], io, { writer });
 
-    expect(code).toBe(EXIT.NOT_IMPLEMENTED);
-    expect(io.out).toEqual([]);
-    expect(io.err.join('\n')).toContain('not implemented yet');
+    expect(code).toBe(EXIT.OK);
+    expect([...writer.files.keys()]).toContain('/tmp/x/findings.json');
+    expect(io.out.join('\n')).toContain('/tmp/x/report.html');
+  });
+
+  test('rejects a scan invocation without a URL', async () => {
+    const code = await runCli(['scan'], io, { writer: memoryWriter() });
+
+    expect(code).toBe(EXIT.USAGE);
+    expect(io.err.join('\n')).toContain('scan requires a URL');
+  });
+
+  test('reports a per-axis score line and never a composite one', async () => {
+    await runCli(['scan', 'https://example.com', '--out', '/tmp/x'], io, {
+      writer: memoryWriter(),
+    });
+    const stdout = io.out.join('\n');
+
+    expect(stdout).toContain('PERF');
+    expect(stdout).toContain('SEO     0/100');
+    expect(stdout).not.toMatch(/overall|global|total score/i);
   });
 });
