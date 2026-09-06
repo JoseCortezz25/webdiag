@@ -31,6 +31,9 @@
     "typescript": "5.9.3"
   },
   "dependencies": {
+    "@puppeteer/browsers": "3.2.2",
+    "chrome-launcher": "1.2.1",
+    "lighthouse": "13.4.1",
     "zod": "4.5.4"
   }
 }

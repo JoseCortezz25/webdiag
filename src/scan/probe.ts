@@ -43,14 +43,25 @@ function messageOf(cause: unknown): string {
   return cause instanceof Error ? cause.message : String(cause);
 }
 
-/** Runs one probe and contains its failure to that probe's axis. */
+/**
+ * Runs one probe and contains its failure to that probe's axis.
+ *
+ * On success the version recorded is the document's, not the probe's declared
+ * one. A probe can only *declare* the versions it intends to use — the pinned
+ * Lighthouse, the pinned Chrome — but what belongs in `meta.json` is what
+ * actually ran, and only the finished document knows that. On failure there is
+ * no document, so the declared version is the honest answer to "what would have
+ * measured this".
+ */
 export async function runProbe(probe: Probe, context: ProbeContext): Promise<ProbeOutcome> {
   try {
+    const raw = await probe.run(context);
+
     return {
       status: 'ok',
       axis: probe.axis,
-      tool: probe.tool,
-      raw: await probe.run(context),
+      tool: raw.tool,
+      raw,
     };
   } catch (cause) {
     return {

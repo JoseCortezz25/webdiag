@@ -17,13 +17,22 @@ export {
   type ScanRequest,
   type ScanResult,
 } from './orchestrator.ts';
+export {
+  CHROME_TOOL_NAME,
+  lighthouseProbe,
+  PINNED_CHROME_BUILD,
+  PINNED_LIGHTHOUSE_VERSION,
+  PINNED_PERF_TOOL,
+} from './perf/index.ts';
 export { type Probe, type ProbeContext, type ProbeOutcome, runProbe } from './probe.ts';
+export { defaultProbes } from './probes.ts';
 export {
   parseRawDocument,
   RAW_SCHEMA_VERSION,
   type RawDocument,
   type RawObservation,
   rawDocumentSchema,
+  type ToolComponent,
   type ToolVersion,
 } from './raw.ts';
 export { escapeHtml, renderReport } from './report.ts';

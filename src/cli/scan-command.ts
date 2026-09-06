@@ -42,6 +42,14 @@ export async function runScanCommand(
     }
 
     for (const axis of result.summary.byAxis) {
+      // An axis with no probe has no findings, and no findings scores 100.
+      // Printing that would report a browser that never started as a perfect
+      // result, so a failed axis gets no number.
+      if (axis.probe.status === 'failed') {
+        out.stdout(`  ${axis.axis.padEnd(5)}   -/${axis.maxScore} (probe no disponible)`);
+        continue;
+      }
+
       const note = axis.zeroed ? ' (anulado por hallazgo bloqueante)' : '';
       out.stdout(
         `  ${axis.axis.padEnd(5)} ${String(axis.score).padStart(3)}/${axis.maxScore}${note}`,
