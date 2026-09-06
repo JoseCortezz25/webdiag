@@ -1,0 +1,26 @@
+{
+  "schema": "webdiag.agent-findings/1",
+  "findings": [
+    {
+      "id": "A11Y-ALT-NOT-DESCRIPTIVE",
+      "confidence": "high",
+      "count": 3,
+      "affected": ["/producto/vestido-verano", "/producto/chaqueta-denim"],
+      "evidence": {
+        "screenshot": "alt/004.png",
+        "alt": "imagen1.jpg",
+        "reasoning": "El alt de la foto de producto repite el nombre de archivo original en vez de describir la prenda; un lector de pantalla anuncia 'imagen1.jpg', no de que producto se trata."
+      }
+    },
+    {
+      "id": "A11Y-FOCUS-NOT-VISIBLE",
+      "confidence": "high",
+      "count": 1,
+      "affected": [".nav a"],
+      "evidence": {
+        "screenshot": "focus/002.png",
+        "reasoning": "El screenshot en estado :focus del enlace 'Categorias' no muestra outline ni cambio de fondo frente al screenshot por defecto; el CSS del tema quita el outline nativo (outline: none) sin sustituto."
+      }
+    }
+  ]
+}
