@@ -42,3 +42,4 @@ export {
   PINNED_PERF_TOOL,
   pathOf,
 } from './probe.ts';
+export { PROFILE_PREFIX, withBrowserProfile } from './profile.ts';

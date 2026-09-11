@@ -198,18 +198,24 @@ export function sandboxArgs(env: ChromeEnvironment = process.env): readonly stri
  * `headless: 'shell'` because the binary *is* `chrome-headless-shell`: it does
  * not understand `--headless=new`, which is what `headless: true` would pass.
  * No `--headless` in `args` either, for the same reason — puppeteer adds the
- * one flag the shell expects. Puppeteer owns the profile directory: it is
- * created under the OS temp directory and removed on `close()`, so a scan never
- * writes anything into the operator's working directory.
+ * one flag the shell expects.
+ *
+ * `profileDir` is passed as `userDataDir` and is owned by the caller, not by
+ * puppeteer: see `withBrowserProfile`, which creates it under the OS temp
+ * directory and removes it. Naming it explicitly is the point — it is what keeps
+ * the profile from ever landing in the operator's working directory (the
+ * `chrome-launcher` incident), instead of depending on a puppeteer default.
  */
 export function headlessLaunchOptions(
   chrome: ResolvedChrome,
   args: readonly string[] = [],
+  profileDir?: string,
 ): LaunchOptions & { readonly executablePath: string; readonly headless: 'shell' } {
   return {
     executablePath: chrome.executablePath,
     headless: 'shell',
     args: args.filter((flag) => !flag.startsWith('--headless')),
+    ...(profileDir === undefined ? {} : { userDataDir: profileDir }),
   };
 }
 

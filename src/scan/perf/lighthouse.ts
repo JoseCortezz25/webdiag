@@ -14,7 +14,9 @@
  * latter decides where the profile directory goes by guessing at the host,
  * and under WSL that guess is a Windows path which, joined from Linux, becomes
  * a literal `C:\Users\...` directory in the operator's working directory.
- * Puppeteer keeps the profile under the OS temp directory and removes it.
+ * `withBrowserProfile` now owns that directory explicitly — under the OS temp
+ * directory, removed however the run ends — so the guarantee does not rest on a
+ * puppeteer default.
  */
 import lighthouse from 'lighthouse';
 import puppeteer from 'puppeteer';
@@ -25,6 +27,7 @@ import {
   resolveChromeOnce,
 } from './chrome.ts';
 import type { LighthouseReport } from './lhr.ts';
+import { withBrowserProfile } from './profile.ts';
 
 /** Pinned, no range. `chrome.test.ts` fails when the lockfile drifts from it. */
 export const PINNED_LIGHTHOUSE_VERSION = '13.4.1';
@@ -74,32 +77,36 @@ export async function runLighthouse(
 ): Promise<LighthouseRun> {
   const chrome = options.chrome ?? (await resolveChromeOnce());
 
-  const browser = await puppeteer.launch(headlessLaunchOptions(chrome, LIGHTHOUSE_CHROME_FLAGS));
+  return withBrowserProfile(async (profileDir) => {
+    const browser = await puppeteer.launch(
+      headlessLaunchOptions(chrome, LIGHTHOUSE_CHROME_FLAGS, profileDir),
+    );
 
-  try {
-    const run = await lighthouse(url, {
-      port: debuggingPortOf(browser.wsEndpoint()),
-      output: 'json',
-      logLevel: 'error',
-      onlyCategories: [...CATEGORIES],
-      ...SETTINGS,
-    });
+    try {
+      const run = await lighthouse(url, {
+        port: debuggingPortOf(browser.wsEndpoint()),
+        output: 'json',
+        logLevel: 'error',
+        onlyCategories: [...CATEGORIES],
+        ...SETTINGS,
+      });
 
-    if (run === undefined) {
-      throw new Error('Lighthouse returned no result.');
+      if (run === undefined) {
+        throw new Error('Lighthouse returned no result.');
+      }
+
+      const report = run.lhr as unknown as LighthouseReport;
+
+      // A page that never painted yields a report full of errored audits.
+      // Reading it would mean inventing findings out of missing data; failing
+      // the probe marks the axis as unmeasured, which is what actually happened.
+      if (report.runtimeError !== undefined) {
+        throw new Error(`Lighthouse could not load the page: ${report.runtimeError.message}`);
+      }
+
+      return { report, chrome };
+    } finally {
+      await browser.close();
     }
-
-    const report = run.lhr as unknown as LighthouseReport;
-
-    // A page that never painted yields a report full of errored audits. Reading
-    // it would mean inventing findings out of missing data; failing the probe
-    // marks the axis as unmeasured, which is what actually happened.
-    if (report.runtimeError !== undefined) {
-      throw new Error(`Lighthouse could not load the page: ${report.runtimeError.message}`);
-    }
-
-    return { report, chrome };
-  } finally {
-    await browser.close();
-  }
+  });
 }

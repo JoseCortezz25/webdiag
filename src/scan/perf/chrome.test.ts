@@ -106,6 +106,16 @@ describe('headlessLaunchOptions', () => {
   test('the Lighthouse flag set carries no --headless either', () => {
     expect(LIGHTHOUSE_CHROME_FLAGS.some((flag) => flag.startsWith('--headless'))).toBe(false);
   });
+
+  test('uses the caller-owned profile directory when it is given one', () => {
+    const options = headlessLaunchOptions(RESOLVED, [], '/tmp/webdiag-perf-abc123');
+
+    expect(options.userDataDir).toBe('/tmp/webdiag-perf-abc123');
+  });
+
+  test('leaves the profile to puppeteer only when no directory is given', () => {
+    expect(headlessLaunchOptions(RESOLVED).userDataDir).toBeUndefined();
+  });
 });
 
 describe('sandboxArgs', () => {
