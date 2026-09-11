@@ -30,6 +30,7 @@ import {
   resolveChromeOnce,
   sandboxArgs,
 } from '../perf/chrome.ts';
+import { withBrowserProfile } from '../perf/profile.ts';
 import type { ProbeContext } from '../probe.ts';
 import type { ToolVersion } from '../raw.ts';
 import type { AxeAnalysis } from './adapter.ts';
@@ -90,58 +91,61 @@ export async function analyzeWithBrowser(
 ): Promise<AxeAnalysis> {
   const chrome = options.chrome ?? (await resolveChromeOnce());
   const launch = options.launch ?? ((launchOptions) => puppeteer.launch(launchOptions));
-  const browser = await launch(headlessLaunchOptions(chrome, sandboxArgs()));
 
-  try {
-    const page = await browser.newPage();
-    await page.setViewport(VIEWPORT);
-    await page.setBypassCSP(true);
-    page.setDefaultTimeout(AXE_TIMEOUT_MS);
-
-    let navigationTimedOut = false;
-    let httpStatus: number | undefined;
+  return withBrowserProfile(async (profileDir) => {
+    const browser = await launch(headlessLaunchOptions(chrome, sandboxArgs(), profileDir));
 
     try {
-      const response = await page.goto(context.url, {
-        waitUntil: 'networkidle2',
-        timeout: NAVIGATION_TIMEOUT_MS,
-      });
-      httpStatus = response?.status();
-    } catch (cause) {
-      if (!isTimeout(cause)) {
-        throw cause;
+      const page = await browser.newPage();
+      await page.setViewport(VIEWPORT);
+      await page.setBypassCSP(true);
+      page.setDefaultTimeout(AXE_TIMEOUT_MS);
+
+      let navigationTimedOut = false;
+      let httpStatus: number | undefined;
+
+      try {
+        const response = await page.goto(context.url, {
+          waitUntil: 'networkidle2',
+          timeout: NAVIGATION_TIMEOUT_MS,
+        });
+        httpStatus = response?.status();
+      } catch (cause) {
+        if (!isTimeout(cause)) {
+          throw cause;
+        }
+        navigationTimedOut = true;
       }
-      navigationTimedOut = true;
-    }
 
-    await page.evaluate(`${await axeSource()}\n;undefined;`);
+      await page.evaluate(`${await axeSource()}\n;undefined;`);
 
-    const injected = await page.evaluate(
-      'typeof axe === "object" && typeof axe.run === "function"',
-    );
-
-    if (injected !== true) {
-      throw new Error(
-        'axe-core did not load in the page; the document may have blocked scripting.',
+      const injected = await page.evaluate(
+        'typeof axe === "object" && typeof axe.run === "function"',
       );
+
+      if (injected !== true) {
+        throw new Error(
+          'axe-core did not load in the page; the document may have blocked scripting.',
+        );
+      }
+
+      const report = parseAxeReport(
+        await page.evaluate(`axe.run(document, ${JSON.stringify(AXE_OPTIONS)})`),
+      );
+
+      // The version the binary itself reported when it was resolved: the pin is
+      // a request, and only the binary can confirm what actually rendered the page.
+      const browserTool: ToolVersion = { name: CHROME_TOOL_NAME, version: chrome.version };
+
+      return {
+        report,
+        browser: browserTool,
+        pageUrl: page.url(),
+        httpStatus,
+        navigationTimedOut,
+      };
+    } finally {
+      await browser.close();
     }
-
-    const report = parseAxeReport(
-      await page.evaluate(`axe.run(document, ${JSON.stringify(AXE_OPTIONS)})`),
-    );
-
-    // The version the binary itself reported when it was resolved: the pin is a
-    // request, and only the binary can confirm what actually rendered the page.
-    const browserTool: ToolVersion = { name: CHROME_TOOL_NAME, version: chrome.version };
-
-    return {
-      report,
-      browser: browserTool,
-      pageUrl: page.url(),
-      httpStatus,
-      navigationTimedOut,
-    };
-  } finally {
-    await browser.close();
-  }
+  });
 }
