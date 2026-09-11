@@ -5,6 +5,6 @@
  * depend on `package.json` being present next to it. `version.test.ts` fails the
  * build if the two ever drift apart.
  */
-export const VERSION = '0.1.2';
+export const VERSION = '0.1.3';
 
 export const PROGRAM_NAME = 'webdiag';

@@ -46,6 +46,75 @@ describe('escapeHtml', () => {
   });
 });
 
+describe('renderReport — seccion de Rendimiento estilo Lighthouse', () => {
+  test('renders the score gauge and the score metrics', async () => {
+    const { html } = await renderStubReport();
+
+    expect(html).toContain('class="perf"');
+    expect(html).toContain('Score de Lighthouse');
+    expect(html).toContain('First Contentful Paint');
+    expect(html).toContain('Largest Contentful Paint');
+    expect(html).toContain('Speed Index');
+    expect(html).toContain('Total Blocking Time');
+    expect(html).toContain('Cumulative Layout Shift');
+  });
+
+  test('colours the metrics by threshold band', async () => {
+    const { html } = await renderStubReport();
+
+    expect(html).toContain('class="metric good"');
+    expect(html).toContain('class="metric poor"');
+  });
+
+  test('states that TBT is a proxy, never INP', async () => {
+    const { html } = await renderStubReport();
+
+    expect(html).toContain('Proxy de laboratorio para INP');
+  });
+
+  test('shows opportunities with estimated savings and diagnostics, collapsible without JS', async () => {
+    const { html } = await renderStubReport();
+
+    expect(html).toContain('<details class="perf-block"');
+    expect(html).toContain('Oportunidades');
+    expect(html).toContain('Diagnosticos');
+    expect(html).toContain('Ahorro estimado');
+    expect(html).toContain('~1.6 s');
+    expect(html).toContain('1840 KB');
+    expect(html).toContain('Imagenes sin width/height');
+  });
+
+  test('renders no Lighthouse section for a Performance axis that failed to measure', async () => {
+    const summary = buildSummary({
+      url: 'https://example.com',
+      mode: 'quick',
+      pages: 1,
+      requestedAxes: ['PERF'],
+      outcomes: [],
+      findings: [],
+      rejected: [],
+    });
+
+    const meta = buildMeta({
+      url: 'https://example.com',
+      mode: 'quick',
+      pages: 1,
+      axes: ['PERF'],
+      outcomes: [],
+      startedAt: new Date('2026-09-06T12:00:00.000Z'),
+      finishedAt: new Date('2026-09-06T12:00:01.000Z'),
+      artifacts: ['report.html'],
+      runtime: { engine: 'bun@test', platform: 'test', arch: 'test' },
+    });
+
+    const html = renderReport(summary, meta);
+
+    expect(html).toContain('id="axis-PERF"');
+    expect(html).toContain('sin medir');
+    expect(html).not.toContain('class="perf"');
+  });
+});
+
 describe('renderReport — el eje AGENT declara su impacto no probado', () => {
   test('states it in the axis section, not only in the disclaimer block', async () => {
     const { html } = await renderStubReport();

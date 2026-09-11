@@ -18,6 +18,16 @@ export {
   type FieldMetrics,
   fetchFieldData,
 } from './crux.ts';
+export {
+  type MetricState,
+  PERF_DETAIL_SCHEMA,
+  type PerfDetail,
+  type PerfDiagnostic,
+  type PerfMetric,
+  type PerfOpportunity,
+  parsePerfDetail,
+  perfDetail,
+} from './detail.ts';
 export type { LighthouseAudit, LighthouseReport } from './lhr.ts';
 export {
   type LighthouseRun,
