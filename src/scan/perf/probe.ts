@@ -17,6 +17,7 @@ import type { Probe, ProbeContext } from '../probe.ts';
 import { RAW_SCHEMA_VERSION, type RawDocument, type ToolVersion } from '../raw.ts';
 import { CHROME_TOOL_NAME, PINNED_CHROME_BUILD, type ResolvedChrome } from './chrome.ts';
 import { type FieldData, fetchFieldData } from './crux.ts';
+import { perfDetail } from './detail.ts';
 import { type LighthouseRun, PINNED_LIGHTHOUSE_VERSION, runLighthouse } from './lighthouse.ts';
 import { perfObservations } from './observations.ts';
 
@@ -77,6 +78,7 @@ export function lighthouseProbe(options: PerfProbeOptions = {}): Probe {
           path: pathOf(run.report.finalDisplayedUrl ?? context.url),
           field: fieldData,
         }),
+        detail: perfDetail(run.report),
       };
     },
   };

@@ -23,6 +23,7 @@
  */
 import type { Axis, Mode } from '../catalog/index.ts';
 import { AXES } from '../catalog/index.ts';
+import type { PerfDetail } from './perf/detail.ts';
 import type { Probe, ProbeContext } from './probe.ts';
 import {
   RAW_SCHEMA_VERSION,
@@ -249,6 +250,107 @@ const FIXTURE: Readonly<Record<Axis, readonly StubObservation[]>> = {
   ],
 };
 
+/**
+ * The Performance `detail` fixture. It exists for the same reason the
+ * observations do: phase 0 has to render a complete, realistic report from
+ * invented data, and the Lighthouse-style section cannot be exercised without
+ * one. It is a literal rather than a call to `perfDetail` so the stub keeps
+ * producing a fixed result no matter what the real mapper does.
+ */
+const PERF_DETAIL_FIXTURE: PerfDetail = {
+  schema: 'webdiag.perf/1',
+  score: 46,
+  scoreState: 'poor',
+  metrics: [
+    {
+      id: 'FCP',
+      label: 'First Contentful Paint',
+      value: 1200,
+      display: '1.2 s',
+      unit: 'ms',
+      good: 1800,
+      poor: 3000,
+      state: 'good',
+      composesScore: true,
+    },
+    {
+      id: 'LCP',
+      label: 'Largest Contentful Paint',
+      value: 4120,
+      display: '4.1 s',
+      unit: 'ms',
+      good: 2500,
+      poor: 4000,
+      state: 'poor',
+      composesScore: true,
+    },
+    {
+      id: 'SI',
+      label: 'Speed Index',
+      value: 3200,
+      display: '3.2 s',
+      unit: 'ms',
+      good: 3400,
+      poor: 5800,
+      state: 'good',
+      composesScore: true,
+    },
+    {
+      id: 'TBT',
+      label: 'Total Blocking Time',
+      value: 890,
+      display: '890 ms',
+      unit: 'ms',
+      good: 200,
+      poor: 600,
+      state: 'poor',
+      composesScore: true,
+      note: 'Proxy de laboratorio para INP; no es INP.',
+    },
+    {
+      id: 'CLS',
+      label: 'Cumulative Layout Shift',
+      value: 0.06,
+      display: '0.06',
+      unit: 'score',
+      good: 0.1,
+      poor: 0.25,
+      state: 'good',
+      composesScore: true,
+    },
+    {
+      id: 'TTFB',
+      label: 'Time to First Byte',
+      value: 620,
+      display: '620 ms',
+      unit: 'ms',
+      good: 800,
+      poor: 1800,
+      state: 'good',
+      composesScore: false,
+      note: 'No compone el score de Lighthouse.',
+    },
+  ],
+  opportunities: [
+    {
+      title: 'Eliminar recursos que bloquean el render',
+      savingsMs: 1600,
+      count: 2,
+      examples: ['https://example.com/style.css', 'https://example.com/modernizr.js'],
+    },
+    {
+      title: 'Mejorar la entrega de imagenes',
+      savingsKb: 1840,
+      count: 12,
+      examples: ['https://example.com/img/hero.png'],
+    },
+  ],
+  diagnostics: [
+    { title: 'Imagenes sin width/height', count: 5, examples: ['img.logo'] },
+    { title: 'Tamano del DOM', detail: '1420 elementos' },
+  ],
+};
+
 function observationsFor(axis: Axis, mode: Mode): readonly RawObservation[] {
   return (FIXTURE[axis] ?? [])
     .filter((observation) => observation.modes.includes(mode))
@@ -267,6 +369,7 @@ export function stubProbe(axis: Axis): Probe {
         tool: STUB_TOOL,
         target: { url: context.url, mode: context.mode },
         observations: observationsFor(axis, context.mode),
+        ...(axis === 'PERF' ? { detail: structuredClone(PERF_DETAIL_FIXTURE) } : {}),
       });
     },
   };

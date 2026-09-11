@@ -82,6 +82,17 @@ export const rawDocumentSchema = z.object({
    * learns retire.js, Lighthouse or osv-scanner's vocabulary.
    */
   artifacts: z.record(z.string(), z.string()).readonly().optional(),
+  /**
+   * Axis-specific structured payload that layer 2 must not interpret.
+   *
+   * `observations` is a list of threshold-crossing claims; some axes also have
+   * presentation-grade data no claim can carry — the Performance probe's
+   * per-metric values, opportunities and diagnostics, for instance. The
+   * normalizer reads only `observations`; this travels verbatim into
+   * `summary.json` for the report to render. It is `unknown` here on purpose:
+   * raw.ts must not learn any one axis's vocabulary.
+   */
+  detail: z.unknown().optional(),
 });
 
 export type RawDocument = z.infer<typeof rawDocumentSchema>;

@@ -85,6 +85,13 @@ export type AxisSummary = {
   readonly lowConfidence: readonly FindingSummary[];
   /** Owned by another axis; shown here for context, subtracted there. */
   readonly mentions: readonly FindingSummary[];
+  /**
+   * Axis-specific presentation payload, opaque to this layer. The Performance
+   * probe emits its metrics/opportunities/diagnostics here; layer 3 and the
+   * report read it. Kept `unknown` so `summary.ts` stays axis-agnostic — see
+   * `raw.ts`, which is where the same decision is documented.
+   */
+  readonly detail?: unknown;
 };
 
 export type Summary = {
@@ -159,7 +166,7 @@ function probeSummary(outcome: ProbeOutcome): ProbeSummary {
   };
 }
 
-function axisSummary(score: AxisScore, probe: ProbeSummary): AxisSummary {
+function axisSummary(score: AxisScore, probe: ProbeSummary, detail: unknown): AxisSummary {
   return {
     axis: score.axis,
     score: score.score,
@@ -177,6 +184,7 @@ function axisSummary(score: AxisScore, probe: ProbeSummary): AxisSummary {
     findings: score.scored.map(toFindingSummary),
     lowConfidence: score.lowConfidence.map(toFindingSummary),
     mentions: score.mentions.map(toFindingSummary),
+    ...(detail === undefined ? {} : { detail }),
   };
 }
 
@@ -216,7 +224,9 @@ export function buildSummary(input: SummaryInput): Summary {
           }
         : probeSummary(outcome);
 
-    return axisSummary(scores[axis], probe);
+    const detail = outcome?.status === 'ok' ? outcome.raw.detail : undefined;
+
+    return axisSummary(scores[axis], probe, detail);
   });
 
   const low = lowConfidenceFindings(input.findings);

@@ -19,6 +19,14 @@ import type { Severity } from '../catalog/index.ts';
 import { requireEntry } from '../catalog/index.ts';
 import { PROGRAM_NAME, VERSION } from '../version.ts';
 import type { Meta } from './meta.ts';
+import {
+  type MetricState,
+  type PerfDetail,
+  type PerfDiagnostic,
+  type PerfMetric,
+  type PerfOpportunity,
+  parsePerfDetail,
+} from './perf/detail.ts';
 import type { AxisSummary, FindingSummary, Summary } from './summary.ts';
 
 const AXIS_LABEL: Readonly<Record<string, string>> = {
@@ -239,6 +247,138 @@ function coverageSection(axis: AxisSummary): string {
   ].join('');
 }
 
+/**
+ * The Performance axis gets a Lighthouse-style section on top of the generic
+ * finding list. It is the one axis whose audience expects to see the numbers
+ * themselves, not only the ones that crossed a threshold.
+ *
+ * Same guarantees as the rest of the report: no JS (native `<details>`), no
+ * external requests (the gauge is inline SVG), and no combined axis score — the
+ * gauge is Lighthouse's own, labelled as such, and never replaces the axis
+ * score this report computes.
+ */
+const PERF_STATE_LABEL: Readonly<Record<MetricState, string>> = {
+  good: 'Bueno',
+  'needs-improvement': 'Mejorable',
+  poor: 'Malo',
+};
+
+function formatDuration(ms: number): string {
+  return ms >= 1000 ? `${(ms / 1000).toFixed(1)} s` : `${Math.round(ms)} ms`;
+}
+
+function perfGauge(detail: PerfDetail): string {
+  if (detail.score === null) {
+    return '';
+  }
+
+  const radius = 54;
+  const circumference = 2 * Math.PI * radius;
+  const dash = (detail.score / 100) * circumference;
+  const color =
+    detail.score >= 90 ? 'var(--good)' : detail.score >= 50 ? 'var(--medium)' : 'var(--critical)';
+
+  return [
+    '<div class="perf-gauge">',
+    `<svg viewBox="0 0 120 120" role="img" aria-label="Score de Lighthouse: ${detail.score} sobre 100">`,
+    `<circle cx="60" cy="60" r="${radius}" fill="none" stroke="var(--line)" stroke-width="10"/>`,
+    `<circle cx="60" cy="60" r="${radius}" fill="none" stroke="${color}" stroke-width="10" stroke-linecap="round" stroke-dasharray="${dash.toFixed(2)} ${(circumference - dash).toFixed(2)}" transform="rotate(-90 60 60)"/>`,
+    `<text x="60" y="60" class="perf-gauge-value" text-anchor="middle" dominant-baseline="central">${detail.score}</text>`,
+    '</svg>',
+    '<span class="perf-gauge-label">Score de Lighthouse</span>',
+    '<span class="perf-gauge-note">Compone FCP, SI, LCP, TBT y CLS. No sustituye al puntaje del eje.</span>',
+    '</div>',
+  ].join('');
+}
+
+function perfMetricCard(metric: PerfMetric): string {
+  return [
+    `<div class="metric ${metric.state}">`,
+    `<span class="metric-label">${escapeHtml(metric.label)} <code>${escapeHtml(metric.id)}</code></span>`,
+    `<span class="metric-value">${escapeHtml(metric.display)}</span>`,
+    `<span class="metric-state">${escapeHtml(PERF_STATE_LABEL[metric.state])}</span>`,
+    metric.note === undefined ? '' : `<span class="metric-note">${escapeHtml(metric.note)}</span>`,
+    '</div>',
+  ].join('');
+}
+
+function perfExamples(examples: readonly string[] | undefined): string {
+  if (examples === undefined || examples.length === 0) {
+    return '';
+  }
+
+  return [
+    '<details class="examples">',
+    `<summary>Ver ejemplos (${examples.length})</summary>`,
+    `<ul>${examples.map((example) => `<li><code>${escapeHtml(example)}</code></li>`).join('')}</ul>`,
+    '</details>',
+  ].join('');
+}
+
+function perfOpportunityItem(item: PerfOpportunity): string {
+  const savings: string[] = [];
+  if (item.savingsMs !== undefined && item.savingsMs > 0) {
+    savings.push(`~${formatDuration(item.savingsMs)}`);
+  }
+  if (item.savingsKb !== undefined && item.savingsKb > 0) {
+    savings.push(`~${item.savingsKb} KB`);
+  }
+
+  const savingsMarkup =
+    savings.length === 0
+      ? ''
+      : `<span class="savings">Ahorro estimado: ${escapeHtml(savings.join(' / '))}</span>`;
+  const count =
+    item.count === undefined ? '' : `<span class="count">${item.count} recurso(s)</span>`;
+
+  return `<li>${escapeHtml(item.title)}${savingsMarkup}${count}${perfExamples(item.examples)}</li>`;
+}
+
+function perfDiagnosticItem(item: PerfDiagnostic): string {
+  const detail =
+    item.detail === undefined ? '' : `<span class="count">${escapeHtml(item.detail)}</span>`;
+  const count =
+    item.count === undefined ? '' : `<span class="count">${item.count} elemento(s)</span>`;
+
+  return `<li>${escapeHtml(item.title)}${detail}${count}${perfExamples(item.examples)}</li>`;
+}
+
+function perfBlock(title: string, items: readonly string[]): string {
+  if (items.length === 0) {
+    return '';
+  }
+
+  return [
+    '<details class="perf-block">',
+    `<summary>${escapeHtml(title)} (${items.length})</summary>`,
+    `<ul class="perf-items">${items.join('')}</ul>`,
+    '</details>',
+  ].join('');
+}
+
+function perfSection(axis: AxisSummary): string {
+  if (axis.axis !== 'PERF') {
+    return '';
+  }
+
+  const detail = parsePerfDetail(axis.detail);
+
+  if (detail === undefined) {
+    return '';
+  }
+
+  return [
+    '<div class="perf">',
+    '<div class="perf-head">',
+    perfGauge(detail),
+    `<div class="metrics">${detail.metrics.map(perfMetricCard).join('')}</div>`,
+    '</div>',
+    perfBlock('Oportunidades', detail.opportunities.map(perfOpportunityItem)),
+    perfBlock('Diagnosticos', detail.diagnostics.map(perfDiagnosticItem)),
+    '</div>',
+  ].join('');
+}
+
 function axisSection(axis: AxisSummary): string {
   const mentions =
     axis.mentions.length === 0
@@ -272,6 +412,7 @@ function axisSection(axis: AxisSummary): string {
     caveat,
     toolLine(axis),
     coverageSection(axis),
+    perfSection(axis),
     deductionTable(axis),
     findingList(axis.findings, 'Sin hallazgos puntuados en este eje.'),
     mentions,
@@ -387,6 +528,35 @@ a{color:var(--accent)}
 footer{margin-top:48px;border-top:1px solid var(--line);padding-top:16px;color:var(--dim);font-size:12.5px}
 footer table{border-collapse:collapse;font-size:12.5px;margin-top:8px}
 footer td,footer th{text-align:left;padding:3px 14px 3px 0}
+.perf{border:1px solid var(--line);border-radius:10px;background:var(--panel);padding:16px;margin:0 0 16px}
+.perf-head{display:flex;gap:22px;align-items:center;flex-wrap:wrap}
+.perf-gauge{display:flex;flex-direction:column;align-items:center;min-width:150px}
+.perf-gauge svg{width:120px;height:120px}
+.perf-gauge-value{font:600 34px ui-sans-serif,system-ui,sans-serif;fill:var(--fg)}
+.perf-gauge-label{font-size:13px;color:var(--dim);margin-top:4px}
+.perf-gauge-note{font-size:11px;color:var(--dim);text-align:center;margin-top:2px;max-width:180px}
+.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(128px,1fr));gap:10px;flex:1}
+.metric{display:flex;flex-direction:column;gap:2px;border:1px solid var(--line);border-left:3px solid var(--line);border-radius:8px;padding:10px 12px;background:var(--bg)}
+.metric.good{border-left-color:var(--good)}
+.metric.needs-improvement{border-left-color:var(--medium)}
+.metric.poor{border-left-color:var(--critical)}
+.metric-label{font-size:11.5px;color:var(--dim)}
+.metric-value{font-size:20px;font-weight:600}
+.metric-state{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--dim)}
+.metric.good .metric-state{color:var(--good)}
+.metric.needs-improvement .metric-state{color:var(--medium)}
+.metric.poor .metric-state{color:var(--critical)}
+.metric-note{font-size:11px;color:var(--dim)}
+.perf-block{margin-top:14px;border-top:1px solid var(--line);padding-top:8px}
+.perf-block>summary{cursor:pointer;font-size:12.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--dim)}
+.perf-items{list-style:none;margin:8px 0 0;padding:0;display:flex;flex-direction:column;gap:8px}
+.perf-items>li{border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:13px}
+.perf-items .savings{color:var(--medium);font-weight:600;margin-left:6px}
+.perf-items .count{color:var(--dim);margin-left:6px}
+.examples{margin-top:6px}
+.examples>summary{cursor:pointer;color:var(--dim);font-size:12px}
+.examples ul{margin:4px 0 0;padding-left:16px}
+.examples li{margin:2px 0;word-break:break-word}
 `;
 
 /** Renders the whole report as one self-contained HTML document. */
